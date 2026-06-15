@@ -13,7 +13,7 @@ import (
 var validActions = map[string]bool{"dismissed": true, "hidden": true, "removed": true}
 
 type ReportService interface {
-	List(ctx context.Context, status string) ([]model.Report, error)
+	List(ctx context.Context, status string, limit, offset int) ([]model.Report, int, error)
 	Resolve(ctx context.Context, id uuid.UUID, action string) (*model.Report, error)
 }
 
@@ -25,11 +25,11 @@ func NewReportService(repo repository.ReportRepository) ReportService {
 	return &reportService{repo: repo}
 }
 
-func (s *reportService) List(ctx context.Context, status string) ([]model.Report, error) {
+func (s *reportService) List(ctx context.Context, status string, limit, offset int) ([]model.Report, int, error) {
 	if status != "resolved" {
 		status = "open"
 	}
-	return s.repo.ListByStatus(ctx, status)
+	return s.repo.ListByStatus(ctx, status, limit, offset)
 }
 
 func (s *reportService) Resolve(ctx context.Context, id uuid.UUID, action string) (*model.Report, error) {

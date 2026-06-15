@@ -393,6 +393,15 @@ info:
 paths:
   /api/v1/admin/exams:
     get:
+      parameters:
+      - description: page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: limit (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
@@ -495,6 +504,14 @@ paths:
         in: query
         name: status
         type: string
+      - description: page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: limit (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
@@ -599,6 +616,23 @@ paths:
       - admin
   /api/v1/admin/users:
     get:
+      parameters:
+      - description: search name/email
+        in: query
+        name: q
+        type: string
+      - description: all | pro | free
+        in: query
+        name: plan
+        type: string
+      - description: page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: limit (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
@@ -713,6 +747,15 @@ paths:
       - auth
   /api/v1/blog:
     get:
+      parameters:
+      - description: page (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: limit (default 20, max 100)
+        in: query
+        name: limit
+        type: integer
       produces:
       - application/json
       responses:
@@ -720,7 +763,7 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/handler.blogListEnvelope'
-      summary: List blog posts
+      summary: List blog posts (paginated)
       tags:
       - blog
     post:

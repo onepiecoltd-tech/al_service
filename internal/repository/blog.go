@@ -13,7 +13,7 @@ import (
 )
 
 type BlogRepository interface {
-	List(ctx context.Context) ([]model.BlogPost, error)
+	List(ctx context.Context, limit, offset int) ([]model.BlogPost, int, error)
 	Get(ctx context.Context, id uuid.UUID) (*model.BlogPost, error)
 	Create(ctx context.Context, p *model.BlogPost) error
 	Update(ctx context.Context, p *model.BlogPost) error
@@ -45,10 +45,15 @@ func scanBlog(row pgx.Row) (*model.BlogPost, error) {
 	return &p, nil
 }
 
-func (r *blogRepository) List(ctx context.Context) ([]model.BlogPost, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+blogColumns+` FROM blog_posts ORDER BY created_at DESC`)
+func (r *blogRepository) List(ctx context.Context, limit, offset int) ([]model.BlogPost, int, error) {
+	var total int
+	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM blog_posts`).Scan(&total); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+
+	rows, err := r.db.Query(ctx, `SELECT `+blogColumns+` FROM blog_posts ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
-		return nil, apperror.Internal(err)
+		return nil, 0, apperror.Internal(err)
 	}
 	defer rows.Close()
 
@@ -59,14 +64,14 @@ func (r *blogRepository) List(ctx context.Context) ([]model.BlogPost, error) {
 			&p.ID, &p.Title, &p.Category, &p.Author, &p.Excerpt,
 			&p.Body, &p.Reads, &p.Comments, &p.Status, &p.CreatedAt,
 		); err != nil {
-			return nil, apperror.Internal(err)
+			return nil, 0, apperror.Internal(err)
 		}
 		posts = append(posts, p)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, apperror.Internal(err)
+		return nil, 0, apperror.Internal(err)
 	}
-	return posts, nil
+	return posts, total, nil
 }
 
 func (r *blogRepository) Get(ctx context.Context, id uuid.UUID) (*model.BlogPost, error) {

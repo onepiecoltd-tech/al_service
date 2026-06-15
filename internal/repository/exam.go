@@ -11,7 +11,7 @@ import (
 )
 
 type ExamRepository interface {
-	List(ctx context.Context) ([]model.Exam, error)
+	List(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
 	Create(ctx context.Context, e *model.Exam) error
 	Update(ctx context.Context, e *model.Exam) (*model.Exam, error)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -27,10 +27,15 @@ func NewExamRepository(db *pgxpool.Pool) ExamRepository {
 
 const examColumns = `id, name, type, questions, author, state, created_at`
 
-func (r *examRepository) List(ctx context.Context) ([]model.Exam, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+examColumns+` FROM exams ORDER BY created_at DESC`)
+func (r *examRepository) List(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
+	var total int
+	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM exams`).Scan(&total); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+
+	rows, err := r.db.Query(ctx, `SELECT `+examColumns+` FROM exams ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
-		return nil, apperror.Internal(err)
+		return nil, 0, apperror.Internal(err)
 	}
 	defer rows.Close()
 
@@ -38,14 +43,14 @@ func (r *examRepository) List(ctx context.Context) ([]model.Exam, error) {
 	for rows.Next() {
 		var e model.Exam
 		if err := rows.Scan(&e.ID, &e.Name, &e.Type, &e.Questions, &e.Author, &e.State, &e.CreatedAt); err != nil {
-			return nil, apperror.Internal(err)
+			return nil, 0, apperror.Internal(err)
 		}
 		exams = append(exams, e)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, apperror.Internal(err)
+		return nil, 0, apperror.Internal(err)
 	}
-	return exams, nil
+	return exams, total, nil
 }
 
 func (r *examRepository) Create(ctx context.Context, e *model.Exam) error {

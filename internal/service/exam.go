@@ -12,7 +12,7 @@ import (
 )
 
 type ExamService interface {
-	List(ctx context.Context) ([]model.Exam, error)
+	List(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
 	Create(ctx context.Context, e *model.Exam) error
 	Update(ctx context.Context, e *model.Exam) (*model.Exam, error)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -26,8 +26,8 @@ func NewExamService(repo repository.ExamRepository) ExamService {
 	return &examService{repo: repo}
 }
 
-func (s *examService) List(ctx context.Context) ([]model.Exam, error) {
-	return s.repo.List(ctx)
+func (s *examService) List(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
+	return s.repo.List(ctx, limit, offset)
 }
 
 func (s *examService) Create(ctx context.Context, e *model.Exam) error {

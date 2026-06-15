@@ -30,6 +30,20 @@ const docTemplate = `{
                     "admin"
                 ],
                 "summary": "List exams (admin)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "limit (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -192,6 +206,18 @@ const docTemplate = `{
                         "type": "string",
                         "description": "open (default) or resolved",
                         "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "limit (default 20, max 100)",
+                        "name": "limit",
                         "in": "query"
                     }
                 ],
@@ -363,6 +389,32 @@ const docTemplate = `{
                     "admin"
                 ],
                 "summary": "List all users (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "search name/email",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "all | pro | free",
+                        "name": "plan",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "limit (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -538,7 +590,21 @@ const docTemplate = `{
                 "tags": [
                     "blog"
                 ],
-                "summary": "List blog posts",
+                "summary": "List blog posts (paginated)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "page (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "limit (default 20, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",

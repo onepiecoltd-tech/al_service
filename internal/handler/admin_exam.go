@@ -43,16 +43,19 @@ type examEnvelope struct { //nolint:unused // referenced by swaggo annotations o
 //	@Tags		admin
 //	@Produce	json
 //	@Security	BearerAuth
+//	@Param		page	query		int	false	"page (default 1)"
+//	@Param		limit	query		int	false	"limit (default 20, max 100)"
 //	@Success	200	{object}	examListEnvelope
 //	@Failure	403	{object}	errorEnvelope
 //	@Router		/api/v1/admin/exams [get]
 func (h *AdminExamHandler) List(w http.ResponseWriter, r *http.Request) {
-	exams, err := h.exams.List(r.Context())
+	page, limit, offset := httputil.PageParams(r)
+	exams, total, err := h.exams.List(r.Context(), limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, exams)
+	httputil.Paginated(w, exams, page, limit, total)
 }
 
 // Create godoc

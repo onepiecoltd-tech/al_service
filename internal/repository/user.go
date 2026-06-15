@@ -18,7 +18,7 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	TopByElo(ctx context.Context, limit int) ([]model.User, error)
 	ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error)
-	ListAll(ctx context.Context) ([]model.User, error)
+	ListAll(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	Insert(ctx context.Context, u *model.User) error
 	UpdateAdminFields(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
 }
@@ -81,10 +81,19 @@ func (r *userRepository) TopByElo(ctx context.Context, limit int) ([]model.User,
 	return users, nil
 }
 
-func (r *userRepository) ListAll(ctx context.Context) ([]model.User, error) {
-	rows, err := r.db.Query(ctx, `SELECT `+userColumns+` FROM users ORDER BY created_at`)
+func (r *userRepository) ListAll(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error) {
+	const filter = `
+		WHERE ($1 = '' OR display_name ILIKE '%' || $1 || '%' OR email ILIKE '%' || $1 || '%')
+		  AND ($2 = '' OR lower(plan) = $2)`
+
+	var total int
+	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM users`+filter, q, plan).Scan(&total); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+
+	rows, err := r.db.Query(ctx, `SELECT `+userColumns+` FROM users`+filter+` ORDER BY created_at LIMIT $3 OFFSET $4`, q, plan, limit, offset)
 	if err != nil {
-		return nil, apperror.Internal(err)
+		return nil, 0, apperror.Internal(err)
 	}
 	defer rows.Close()
 
@@ -92,14 +101,14 @@ func (r *userRepository) ListAll(ctx context.Context) ([]model.User, error) {
 	for rows.Next() {
 		var u model.User
 		if err := scanUserInto(rows, &u); err != nil {
-			return nil, apperror.Internal(err)
+			return nil, 0, apperror.Internal(err)
 		}
 		users = append(users, u)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, apperror.Internal(err)
+		return nil, 0, apperror.Internal(err)
 	}
-	return users, nil
+	return users, total, nil
 }
 
 func (r *userRepository) Insert(ctx context.Context, u *model.User) error {

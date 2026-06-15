@@ -75,12 +75,19 @@ func toRow(u *model.User) adminUserRow {
 //	@Tags		admin
 //	@Produce	json
 //	@Security	BearerAuth
+//	@Param		q		query		string	false	"search name/email"
+//	@Param		plan	query		string	false	"all | pro | free"
+//	@Param		page	query		int		false	"page (default 1)"
+//	@Param		limit	query		int		false	"limit (default 20, max 100)"
 //	@Success	200	{object}	adminUserListEnvelope
 //	@Failure	401	{object}	errorEnvelope
 //	@Failure	403	{object}	errorEnvelope
 //	@Router		/api/v1/admin/users [get]
 func (h *AdminUserHandler) List(w http.ResponseWriter, r *http.Request) {
-	users, err := h.admin.List(r.Context())
+	page, limit, offset := httputil.PageParams(r)
+	q := r.URL.Query().Get("q")
+	plan := r.URL.Query().Get("plan")
+	users, total, err := h.admin.List(r.Context(), q, plan, limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -89,7 +96,7 @@ func (h *AdminUserHandler) List(w http.ResponseWriter, r *http.Request) {
 	for i := range users {
 		rows[i] = toRow(&users[i])
 	}
-	httputil.OK(w, rows)
+	httputil.Paginated(w, rows, page, limit, total)
 }
 
 // Create godoc

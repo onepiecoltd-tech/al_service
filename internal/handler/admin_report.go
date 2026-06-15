@@ -35,16 +35,19 @@ type resolveRequest struct {
 //	@Produce	json
 //	@Security	BearerAuth
 //	@Param		status	query		string	false	"open (default) or resolved"
+//	@Param		page	query		int		false	"page (default 1)"
+//	@Param		limit	query		int		false	"limit (default 20, max 100)"
 //	@Success	200		{object}	reportListEnvelope
 //	@Failure	403		{object}	errorEnvelope
 //	@Router		/api/v1/admin/reports [get]
 func (h *AdminReportHandler) List(w http.ResponseWriter, r *http.Request) {
-	reports, err := h.reports.List(r.Context(), r.URL.Query().Get("status"))
+	page, limit, offset := httputil.PageParams(r)
+	reports, total, err := h.reports.List(r.Context(), r.URL.Query().Get("status"), limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, reports)
+	httputil.Paginated(w, reports, page, limit, total)
 }
 
 // Resolve godoc

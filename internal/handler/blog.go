@@ -40,18 +40,21 @@ type blogEnvelope struct { //nolint:unused // referenced by swaggo annotations o
 
 // List godoc
 //
-//	@Summary	List blog posts
+//	@Summary	List blog posts (paginated)
 //	@Tags		blog
 //	@Produce	json
+//	@Param		page	query		int	false	"page (default 1)"
+//	@Param		limit	query		int	false	"limit (default 20, max 100)"
 //	@Success	200	{object}	blogListEnvelope
 //	@Router		/api/v1/blog [get]
 func (h *BlogHandler) List(w http.ResponseWriter, r *http.Request) {
-	posts, err := h.blog.List(r.Context())
+	page, limit, offset := httputil.PageParams(r)
+	posts, total, err := h.blog.List(r.Context(), limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, posts)
+	httputil.Paginated(w, posts, page, limit, total)
 }
 
 // Get godoc

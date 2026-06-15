@@ -22,7 +22,7 @@ type NewUserInput struct {
 }
 
 type AdminUserService interface {
-	List(ctx context.Context) ([]model.User, error)
+	List(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	IsAdmin(ctx context.Context, id uuid.UUID) (bool, error)
 	Create(ctx context.Context, in NewUserInput) (*model.User, error)
 	Update(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
@@ -36,8 +36,12 @@ func NewAdminUserService(users repository.UserRepository) AdminUserService {
 	return &adminUserService{users: users}
 }
 
-func (s *adminUserService) List(ctx context.Context) ([]model.User, error) {
-	return s.users.ListAll(ctx)
+func (s *adminUserService) List(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error) {
+	plan = strings.ToLower(plan)
+	if plan == "all" {
+		plan = ""
+	}
+	return s.users.ListAll(ctx, strings.TrimSpace(q), plan, limit, offset)
 }
 
 func (s *adminUserService) IsAdmin(ctx context.Context, id uuid.UUID) (bool, error) {
