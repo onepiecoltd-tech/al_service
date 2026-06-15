@@ -7,16 +7,19 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
+
 	"github.com/craftbyte/learning_languages/services/internal/config"
 )
 
 type Server struct {
-	cfg *config.Config
+	cfg  *config.Config
+	db   *pgxpool.Pool
 	http *http.Server
 }
 
-func New(cfg *config.Config) *Server {
-	s := &Server{cfg: cfg}
+func New(cfg *config.Config, db *pgxpool.Pool) *Server {
+	s := &Server{cfg: cfg, db: db}
 	s.http = &http.Server{
 		Addr:         cfg.HTTPAddr,
 		Handler:      s.routes(),

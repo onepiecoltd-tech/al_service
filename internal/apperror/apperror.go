@@ -32,6 +32,18 @@ func BadRequest(msg string) *AppError {
 	return New(http.StatusBadRequest, msg, nil)
 }
 
+func Unauthorized(msg string) *AppError {
+	return New(http.StatusUnauthorized, msg, nil)
+}
+
+func Forbidden(msg string) *AppError {
+	return New(http.StatusForbidden, msg, nil)
+}
+
+func Conflict(msg string) *AppError {
+	return New(http.StatusConflict, msg, nil)
+}
+
 func Internal(err error) *AppError {
 	return New(http.StatusInternalServerError, "internal server error", err)
 }

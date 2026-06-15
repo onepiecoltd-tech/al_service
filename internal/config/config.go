@@ -6,8 +6,9 @@ import (
 )
 
 type Config struct {
-	HTTPAddr string
-	DB       DBConfig
+	HTTPAddr  string
+	DB        DBConfig
+	JWTSecret string
 }
 
 type DBConfig struct {
@@ -20,13 +21,19 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("DATABASE_URL is required")
 	}
 
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		return nil, fmt.Errorf("JWT_SECRET is required")
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	return &Config{
-		HTTPAddr: ":" + port,
-		DB:       DBConfig{DSN: dsn},
+		HTTPAddr:  ":" + port,
+		DB:        DBConfig{DSN: dsn},
+		JWTSecret: jwtSecret,
 	}, nil
 }

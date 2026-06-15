@@ -1,0 +1,942 @@
+definitions:
+  handler.adminUserEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/handler.adminUserRow'
+    type: object
+  handler.adminUserListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/handler.adminUserRow'
+        type: array
+    type: object
+  handler.adminUserRow:
+    properties:
+      elo:
+        type: integer
+      email:
+        type: string
+      handle:
+        type: string
+      id:
+        type: string
+      joined:
+        type: string
+      name:
+        type: string
+      plan:
+        type: string
+      role:
+        type: string
+      status:
+        type: string
+    type: object
+  handler.blogEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/model.BlogPost'
+    type: object
+  handler.blogListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.BlogPost'
+        type: array
+    type: object
+  handler.blogRequest:
+    properties:
+      body:
+        type: string
+      category:
+        type: string
+      excerpt:
+        type: string
+      status:
+        example: published
+        type: string
+      title:
+        type: string
+    type: object
+  handler.createUserRequest:
+    properties:
+      email:
+        type: string
+      handle:
+        type: string
+      name:
+        type: string
+      password:
+        type: string
+      plan:
+        example: Free
+        type: string
+      role:
+        example: user
+        type: string
+    type: object
+  handler.errorEnvelope:
+    properties:
+      error:
+        example: invalid email or password
+        type: string
+    type: object
+  handler.examEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/model.Exam'
+    type: object
+  handler.examListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.Exam'
+        type: array
+    type: object
+  handler.examRequest:
+    properties:
+      name:
+        type: string
+      questions:
+        type: integer
+      state:
+        example: draft
+        type: string
+      type:
+        type: string
+    type: object
+  handler.friendListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/handler.friendRow'
+        type: array
+    type: object
+  handler.friendRow:
+    properties:
+      elo:
+        type: integer
+      handle:
+        type: string
+      id:
+        type: string
+      msg:
+        type: string
+      name:
+        type: string
+      presence:
+        type: string
+    type: object
+  handler.giftListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.Gift'
+        type: array
+    type: object
+  handler.leaderboardEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/handler.leaderboardRow'
+        type: array
+    type: object
+  handler.leaderboardRow:
+    properties:
+      elo:
+        type: integer
+      handle:
+        type: string
+      id:
+        type: string
+      me:
+        type: boolean
+      name:
+        type: string
+      wins:
+        type: integer
+    type: object
+  handler.loginEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/handler.loginResponse'
+    type: object
+  handler.loginRequest:
+    properties:
+      email:
+        example: minhanh@email.com
+        type: string
+      password:
+        example: password
+        type: string
+    type: object
+  handler.loginResponse:
+    properties:
+      token:
+        type: string
+      user:
+        $ref: '#/definitions/model.User'
+    type: object
+  handler.notificationListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.Notification'
+        type: array
+    type: object
+  handler.profileEnvelope:
+    properties:
+      data:
+        $ref: '#/definitions/handler.profileResponse'
+    type: object
+  handler.profileResponse:
+    properties:
+      coins:
+        type: integer
+      elo:
+        type: integer
+      email:
+        type: string
+      handle:
+        type: string
+      id:
+        type: string
+      joined:
+        type: string
+      name:
+        type: string
+      plan:
+        type: string
+      rank:
+        type: string
+      role:
+        type: string
+      streak:
+        type: integer
+    type: object
+  handler.reportListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.Report'
+        type: array
+    type: object
+  handler.resolveRequest:
+    properties:
+      action:
+        example: removed
+        type: string
+    type: object
+  handler.settingListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.Setting'
+        type: array
+    type: object
+  handler.updateSettingRequest:
+    properties:
+      value:
+        type: boolean
+    type: object
+  handler.updateUserRequest:
+    properties:
+      plan:
+        example: Pro
+        type: string
+      role:
+        example: mod
+        type: string
+      status:
+        example: active
+        type: string
+    type: object
+  model.BlogPost:
+    properties:
+      author:
+        type: string
+      body:
+        type: string
+      category:
+        type: string
+      comments:
+        type: integer
+      created_at:
+        type: string
+      excerpt:
+        type: string
+      id:
+        type: string
+      reads:
+        type: integer
+      status:
+        description: published | review | draft
+        type: string
+      title:
+        type: string
+    type: object
+  model.Exam:
+    properties:
+      author:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      questions:
+        type: integer
+      state:
+        description: published | review | draft
+        type: string
+      type:
+        type: string
+    type: object
+  model.Gift:
+    properties:
+      emoji:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      price:
+        type: integer
+    type: object
+  model.Notification:
+    properties:
+      created_at:
+        type: string
+      icon:
+        type: string
+      id:
+        type: string
+      read:
+        type: boolean
+      text:
+        type: string
+      tone:
+        description: son | error | gold | reu
+        type: string
+      type:
+        type: string
+    type: object
+  model.Report:
+    properties:
+      action:
+        description: dismissed | hidden | removed | ""
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      reporter:
+        type: string
+      severity:
+        description: err | warn
+        type: string
+      status:
+        description: open | resolved
+        type: string
+      type:
+        type: string
+    type: object
+  model.Setting:
+    properties:
+      key:
+        type: string
+      label:
+        type: string
+      updated_at:
+        type: string
+      value:
+        type: boolean
+    type: object
+  model.User:
+    properties:
+      coins:
+        type: integer
+      created_at:
+        type: string
+      display_name:
+        type: string
+      elo:
+        type: integer
+      email:
+        type: string
+      handle:
+        type: string
+      id:
+        type: string
+      plan:
+        type: string
+      presence:
+        type: string
+      role:
+        description: user | mod | admin
+        type: string
+      status:
+        description: active | banned
+        type: string
+      status_msg:
+        type: string
+      streak:
+        type: integer
+      wins:
+        type: integer
+    type: object
+info:
+  contact: {}
+paths:
+  /api/v1/admin/exams:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.examListEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List exams (admin)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Exam
+        in: body
+        name: exam
+        required: true
+        schema:
+          $ref: '#/definitions/handler.examRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.examEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Create an exam (admin)
+      tags:
+      - admin
+  /api/v1/admin/exams/{id}:
+    delete:
+      parameters:
+      - description: Exam ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: deleted
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Delete an exam (admin)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Exam ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Exam
+        in: body
+        name: exam
+        required: true
+        schema:
+          $ref: '#/definitions/handler.examRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.examEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update an exam (admin)
+      tags:
+      - admin
+  /api/v1/admin/reports:
+    get:
+      parameters:
+      - description: open (default) or resolved
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.reportListEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List moderation reports (admin)
+      tags:
+      - admin
+  /api/v1/admin/reports/{id}/resolve:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Report ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Action
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.resolveRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.reportListEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Resolve a report — dismiss/hide/remove (admin)
+      tags:
+      - admin
+  /api/v1/admin/settings:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.settingListEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List feature settings (admin)
+      tags:
+      - admin
+  /api/v1/admin/settings/{key}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Setting key
+        in: path
+        name: key
+        required: true
+        type: string
+      - description: Value
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateSettingRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.settingListEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Toggle a feature setting (admin)
+      tags:
+      - admin
+  /api/v1/admin/users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.adminUserListEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List all users (admin)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: User
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handler.createUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.adminUserEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Create a user (admin)
+      tags:
+      - admin
+  /api/v1/admin/users/{id}:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields
+        in: body
+        name: user
+        required: true
+        schema:
+          $ref: '#/definitions/handler.updateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.adminUserEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update a user's plan/role/status (admin)
+      tags:
+      - admin
+  /api/v1/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: Authenticates a user and returns a JWT valid for 24 hours.
+      parameters:
+      - description: Login credentials
+        in: body
+        name: credentials
+        required: true
+        schema:
+          $ref: '#/definitions/handler.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: JWT and the authenticated user
+          schema:
+            $ref: '#/definitions/handler.loginEnvelope'
+        "400":
+          description: malformed request
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "401":
+          description: invalid email or password
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      summary: Log in with email and password
+      tags:
+      - auth
+  /api/v1/blog:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.blogListEnvelope'
+      summary: List blog posts
+      tags:
+      - blog
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Post
+        in: body
+        name: post
+        required: true
+        schema:
+          $ref: '#/definitions/handler.blogRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handler.blogEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Create a blog post
+      tags:
+      - blog
+  /api/v1/blog/{id}:
+    delete:
+      parameters:
+      - description: Post ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: deleted
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Delete a blog post
+      tags:
+      - blog
+    get:
+      parameters:
+      - description: Post ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.blogEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      summary: Get a single blog post
+      tags:
+      - blog
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Post ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Post
+        in: body
+        name: post
+        required: true
+        schema:
+          $ref: '#/definitions/handler.blogRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.blogEnvelope'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Update a blog post
+      tags:
+      - blog
+  /api/v1/friends:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.friendListEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List the authenticated user's friends
+      tags:
+      - friends
+  /api/v1/gifts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.giftListEnvelope'
+      summary: Gift catalog
+      tags:
+      - gifts
+  /api/v1/leaderboard:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.leaderboardEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Leaderboard ranked by ELO
+      tags:
+      - leaderboard
+  /api/v1/me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.profileEnvelope'
+        "401":
+          description: missing or invalid token
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get the authenticated user's profile
+      tags:
+      - profile
+  /api/v1/notifications:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.notificationListEnvelope'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: List the authenticated user's notifications
+      tags:
+      - notifications
+  /api/v1/notifications/read:
+    post:
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: marked read
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/handler.errorEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Mark all notifications as read
+      tags:
+      - notifications
+swagger: "2.0"

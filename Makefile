@@ -23,4 +23,7 @@ migrate/down:
 tidy:
 	go mod tidy
 
-.PHONY: run build test test/cover lint migrate/up migrate/down tidy
+swagger:
+	go run github.com/swaggo/swag/cmd/swag@v1.8.1 init -g cmd/api/main.go -o docs
+
+.PHONY: run build test test/cover lint migrate/up migrate/down tidy swagger
