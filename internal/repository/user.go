@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 
 	"github.com/google/uuid"
@@ -21,6 +22,8 @@ type UserRepository interface {
 	SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.User, error)
 	AddFriend(ctx context.Context, userID, friendID uuid.UUID) error
 	RemoveFriend(ctx context.Context, userID, friendID uuid.UUID) error
+	GetPrefs(ctx context.Context, userID uuid.UUID) (map[string]bool, error)
+	SetPrefs(ctx context.Context, userID uuid.UUID, prefs map[string]bool) error
 	ListAll(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	Insert(ctx context.Context, u *model.User) error
 	UpdateAdminFields(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
@@ -212,6 +215,31 @@ func (r *userRepository) RemoveFriend(ctx context.Context, userID, friendID uuid
 		`DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
 		userID, friendID)
 	if err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+func (r *userRepository) GetPrefs(ctx context.Context, userID uuid.UUID) (map[string]bool, error) {
+	var raw []byte
+	if err := r.db.QueryRow(ctx, `SELECT prefs FROM users WHERE id = $1`, userID).Scan(&raw); err != nil {
+		return nil, apperror.Internal(err)
+	}
+	prefs := map[string]bool{}
+	if len(raw) > 0 {
+		if err := json.Unmarshal(raw, &prefs); err != nil {
+			return nil, apperror.Internal(err)
+		}
+	}
+	return prefs, nil
+}
+
+func (r *userRepository) SetPrefs(ctx context.Context, userID uuid.UUID, prefs map[string]bool) error {
+	raw, err := json.Marshal(prefs)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	if _, err := r.db.Exec(ctx, `UPDATE users SET prefs = $2 WHERE id = $1`, userID, raw); err != nil {
 		return apperror.Internal(err)
 	}
 	return nil

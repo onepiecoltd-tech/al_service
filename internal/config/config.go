@@ -6,6 +6,7 @@ import (
 )
 
 type Config struct {
+	Env      string
 	HTTPAddr  string
 	DB        DBConfig
 	JWTSecret string
@@ -31,7 +32,13 @@ func Load() (*Config, error) {
 		port = "8080"
 	}
 
+	env := os.Getenv("ENV")
+	if env == "" {
+		env = "development"
+	}
+
 	return &Config{
+		Env:      env,
 		HTTPAddr:  ":" + port,
 		DB:        DBConfig{DSN: dsn},
 		JWTSecret: jwtSecret,

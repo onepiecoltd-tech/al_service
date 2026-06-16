@@ -30,6 +30,7 @@ func (s *Server) routes() http.Handler {
 	commentRepo := repository.NewCommentRepository(s.db)
 	overviewRepo := repository.NewOverviewRepository(s.db)
 	walletRepo := repository.NewWalletRepository(s.db)
+	badgeRepo := repository.NewBadgeRepository(s.db)
 
 	authService := service.NewAuthService(userRepo, s.cfg.JWTSecret)
 	profileService := service.NewProfileService(userRepo)
@@ -45,6 +46,7 @@ func (s *Server) routes() http.Handler {
 	commentService := service.NewCommentService(commentRepo)
 	overviewService := service.NewOverviewService(overviewRepo)
 	walletService := service.NewWalletService(walletRepo, giftRepo)
+	badgeService := service.NewBadgeService(badgeRepo)
 
 	authHandler := handler.NewAuthHandler(authService, settingService)
 	profileHandler := handler.NewProfileHandler(profileService)
@@ -60,6 +62,7 @@ func (s *Server) routes() http.Handler {
 	adminExamHandler := handler.NewAdminExamHandler(examService, profileService)
 	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
 	walletHandler := handler.NewWalletHandler(walletService)
+	badgeHandler := handler.NewBadgeHandler(badgeService)
 	adminRevenueHandler := handler.NewAdminRevenueHandler(walletService)
 
 	requireAdmin := middleware.AdminOnly(adminUserService.IsAdmin)
@@ -68,6 +71,9 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.Me)))
+	mux.Handle("GET /api/v1/me/badges", requireAuth(http.HandlerFunc(badgeHandler.Me)))
+	mux.Handle("GET /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.GetPrefs)))
+	mux.Handle("PUT /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.SetPrefs)))
 	mux.Handle("GET /api/v1/leaderboard", requireAuth(http.HandlerFunc(leaderboardHandler.List)))
 	mux.Handle("GET /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.List)))
 	mux.Handle("POST /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.Add)))
@@ -88,6 +94,9 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/admin/overview", requireAuth(requireAdmin(http.HandlerFunc(adminOverviewHandler.Get))))
 	mux.Handle("GET /api/v1/admin/transactions", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.Transactions))))
 	mux.Handle("GET /api/v1/admin/revenue", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.Revenue))))
+	mux.Handle("POST /api/v1/admin/coin-packs", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.CreatePack))))
+	mux.Handle("PUT /api/v1/admin/coin-packs/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.UpdatePack))))
+	mux.Handle("DELETE /api/v1/admin/coin-packs/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.DeletePack))))
 	mux.Handle("GET /api/v1/admin/users", requireAuth(requireAdmin(http.HandlerFunc(adminUserHandler.List))))
 	mux.Handle("POST /api/v1/admin/users", requireAuth(requireAdmin(http.HandlerFunc(adminUserHandler.Create))))
 	mux.Handle("PUT /api/v1/admin/users/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminUserHandler.Update))))

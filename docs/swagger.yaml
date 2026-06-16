@@ -44,6 +44,13 @@ definitions:
       status:
         type: string
     type: object
+  handler.badgeListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/model.Badge'
+        type: array
+    type: object
   handler.blogEnvelope:
     properties:
       data:
@@ -76,6 +83,15 @@ definitions:
         items:
           $ref: '#/definitions/model.CoinPack'
         type: array
+    type: object
+  handler.coinPackRequest:
+    properties:
+      coins:
+        type: integer
+      popular:
+        type: boolean
+      vnd:
+        type: integer
     type: object
   handler.commentEnvelope:
     properties:
@@ -230,6 +246,13 @@ definitions:
       data:
         $ref: '#/definitions/model.Overview'
     type: object
+  handler.prefsEnvelope:
+    properties:
+      data:
+        additionalProperties:
+          type: boolean
+        type: object
+    type: object
   handler.profileEnvelope:
     properties:
       data:
@@ -373,6 +396,18 @@ definitions:
         type: string
       vnd:
         type: integer
+    type: object
+  model.Badge:
+    properties:
+      emoji:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      tone:
+        description: son | gold | reu | ink
+        type: string
     type: object
   model.BlogPost:
     properties:
@@ -607,6 +642,78 @@ definitions:
 info:
   contact: {}
 paths:
+  /api/v1/admin/coin-packs:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Pack
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.coinPackRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/model.CoinPack'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Create a coin pack (admin)
+      tags:
+      - admin
+  /api/v1/admin/coin-packs/{id}:
+    delete:
+      parameters:
+      - description: Pack ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: deleted
+      security:
+      - BearerAuth: []
+      summary: Delete a coin pack (admin)
+      tags:
+      - admin
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Pack ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Pack
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handler.coinPackRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              $ref: '#/definitions/model.CoinPack'
+            type: object
+      security:
+      - BearerAuth: []
+      summary: Update a coin pack (admin)
+      tags:
+      - admin
   /api/v1/admin/exams:
     get:
       parameters:
@@ -1366,6 +1473,58 @@ paths:
       security:
       - BearerAuth: []
       summary: Get the authenticated user's profile
+      tags:
+      - profile
+  /api/v1/me/badges:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.badgeListEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Badges earned by the authenticated user
+      tags:
+      - profile
+  /api/v1/me/prefs:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.prefsEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Get my privacy preferences
+      tags:
+      - profile
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Preferences
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: boolean
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handler.prefsEnvelope'
+      security:
+      - BearerAuth: []
+      summary: Replace my privacy preferences
       tags:
       - profile
   /api/v1/notifications:

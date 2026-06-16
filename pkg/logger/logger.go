@@ -3,6 +3,8 @@ package logger
 import (
 	"log/slog"
 	"os"
+
+	"github.com/lmittmann/tint"
 )
 
 func Init(env string) {
@@ -10,7 +12,10 @@ func Init(env string) {
 	if env == "production" {
 		handler = slog.NewJSONHandler(os.Stdout, nil)
 	} else {
-		handler = slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug})
+		handler = tint.NewHandler(os.Stderr, &tint.Options{
+			Level:     slog.LevelDebug,
+			AddSource: false,
+		})
 	}
 	slog.SetDefault(slog.New(handler))
 }

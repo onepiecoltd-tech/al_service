@@ -11,6 +11,7 @@ import (
 
 	"github.com/craftbyte/learning_languages/services/internal/config"
 	"github.com/craftbyte/learning_languages/services/internal/server"
+	"github.com/craftbyte/learning_languages/services/pkg/logger"
 )
 
 //	@title			Learning Languages API
@@ -31,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("load config: %v", err)
 	}
+	logger.Init(cfg.Env)
 
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()

@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/craftbyte/learning_languages/services/internal/apperror"
 	"github.com/craftbyte/learning_languages/services/internal/model"
 	"github.com/craftbyte/learning_languages/services/internal/repository"
 )
@@ -24,6 +25,9 @@ type WalletService interface {
 	Gift(ctx context.Context, userID, giftID uuid.UUID) (*TopupResult, error)
 	AllTransactions(ctx context.Context, limit, offset int) ([]model.AdminTransaction, int, error)
 	Revenue(ctx context.Context) (*model.RevenueSummary, error)
+	CreateCoinPack(ctx context.Context, vnd, coins int, popular bool) (*model.CoinPack, error)
+	UpdateCoinPack(ctx context.Context, id uuid.UUID, vnd, coins int, popular bool) (*model.CoinPack, error)
+	DeleteCoinPack(ctx context.Context, id uuid.UUID) error
 }
 
 type walletService struct {
@@ -69,4 +73,26 @@ func (s *walletService) AllTransactions(ctx context.Context, limit, offset int) 
 
 func (s *walletService) Revenue(ctx context.Context) (*model.RevenueSummary, error) {
 	return s.wallet.Revenue(ctx)
+}
+
+func (s *walletService) CreateCoinPack(ctx context.Context, vnd, coins int, popular bool) (*model.CoinPack, error) {
+	if vnd <= 0 || coins <= 0 {
+		return nil, apperror.BadRequest("vnd và coins phải lớn hơn 0")
+	}
+	p := &model.CoinPack{VND: vnd, Coins: coins, Popular: popular}
+	if err := s.wallet.CreateCoinPack(ctx, p); err != nil {
+		return nil, err
+	}
+	return p, nil
+}
+
+func (s *walletService) UpdateCoinPack(ctx context.Context, id uuid.UUID, vnd, coins int, popular bool) (*model.CoinPack, error) {
+	if vnd <= 0 || coins <= 0 {
+		return nil, apperror.BadRequest("vnd và coins phải lớn hơn 0")
+	}
+	return s.wallet.UpdateCoinPack(ctx, &model.CoinPack{ID: id, VND: vnd, Coins: coins, Popular: popular})
+}
+
+func (s *walletService) DeleteCoinPack(ctx context.Context, id uuid.UUID) error {
+	return s.wallet.DeleteCoinPack(ctx, id)
 }

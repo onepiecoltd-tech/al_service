@@ -14,6 +14,9 @@ import (
 
 type WalletRepository interface {
 	CoinPacks(ctx context.Context) ([]model.CoinPack, error)
+	CreateCoinPack(ctx context.Context, p *model.CoinPack) error
+	UpdateCoinPack(ctx context.Context, p *model.CoinPack) (*model.CoinPack, error)
+	DeleteCoinPack(ctx context.Context, id uuid.UUID) error
 	Topup(ctx context.Context, userID, packID uuid.UUID) (int, *model.Transaction, error)
 	Gift(ctx context.Context, userID uuid.UUID, price int, description string) (int, *model.Transaction, error)
 	ListByUser(ctx context.Context, userID uuid.UUID, limit int) ([]model.Transaction, error)
@@ -29,8 +32,40 @@ func NewWalletRepository(db *pgxpool.Pool) WalletRepository {
 	return &walletRepository{db: db}
 }
 
+func (r *walletRepository) CreateCoinPack(ctx context.Context, p *model.CoinPack) error {
+	err := r.db.QueryRow(ctx,
+		`INSERT INTO coin_packs (vnd, coins, popular, sort) VALUES ($1, $2, $3, $1) RETURNING id`,
+		p.VND, p.Coins, p.Popular).Scan(&p.ID)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+func (r *walletRepository) UpdateCoinPack(ctx context.Context, p *model.CoinPack) (*model.CoinPack, error) {
+	var out model.CoinPack
+	err := r.db.QueryRow(ctx,
+		`UPDATE coin_packs SET vnd = $2, coins = $3, popular = $4 WHERE id = $1 RETURNING id, vnd, coins, popular`,
+		p.ID, p.VND, p.Coins, p.Popular).Scan(&out.ID, &out.VND, &out.Coins, &out.Popular)
+	if err != nil {
+		return nil, apperror.NotFound("coin pack not found")
+	}
+	return &out, nil
+}
+
+func (r *walletRepository) DeleteCoinPack(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM coin_packs WHERE id = $1`, id)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperror.NotFound("coin pack not found")
+	}
+	return nil
+}
+
 func (r *walletRepository) CoinPacks(ctx context.Context) ([]model.CoinPack, error) {
-	rows, err := r.db.Query(ctx, `SELECT id, vnd, coins, popular FROM coin_packs ORDER BY sort`)
+	rows, err := r.db.Query(ctx, `SELECT id, vnd, coins, popular FROM coin_packs ORDER BY vnd`)
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}

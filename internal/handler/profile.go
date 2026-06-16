@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 
@@ -71,6 +72,60 @@ func (h *ProfileHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Role:   u.Role,
 		Joined: fmt.Sprintf("Tháng %d, %d", int(u.CreatedAt.Month()), u.CreatedAt.Year()),
 	})
+}
+
+type prefsEnvelope struct { //nolint:unused // referenced by swaggo annotations only
+	Data map[string]bool `json:"data"`
+}
+
+// GetPrefs godoc
+//
+//	@Summary	Get my privacy preferences
+//	@Tags		profile
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Success	200	{object}	prefsEnvelope
+//	@Router		/api/v1/me/prefs [get]
+func (h *ProfileHandler) GetPrefs(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httputil.Error(w, apperror.Unauthorized("not authenticated"))
+		return
+	}
+	prefs, err := h.profiles.GetPrefs(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, prefs)
+}
+
+// SetPrefs godoc
+//
+//	@Summary	Replace my privacy preferences
+//	@Tags		profile
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		body	body		map[string]bool	true	"Preferences"
+//	@Success	200		{object}	prefsEnvelope
+//	@Router		/api/v1/me/prefs [put]
+func (h *ProfileHandler) SetPrefs(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httputil.Error(w, apperror.Unauthorized("not authenticated"))
+		return
+	}
+	var prefs map[string]bool
+	if err := json.NewDecoder(r.Body).Decode(&prefs); err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid request body"))
+		return
+	}
+	if err := h.profiles.SetPrefs(r.Context(), id, prefs); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, prefs)
 }
 
 func rankFromElo(elo int) string {

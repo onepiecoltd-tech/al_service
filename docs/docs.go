@@ -16,6 +16,123 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/api/v1/admin/coin-packs": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create a coin pack (admin)",
+                "parameters": [
+                    {
+                        "description": "Pack",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.coinPackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/model.CoinPack"
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/coin-packs/{id}": {
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update a coin pack (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pack ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Pack",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.coinPackRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "$ref": "#/definitions/model.CoinPack"
+                            }
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete a coin pack (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Pack ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "deleted"
+                    }
+                }
+            }
+        },
         "/api/v1/admin/exams": {
             "get": {
                 "security": [
@@ -1234,6 +1351,93 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/me/badges": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Badges earned by the authenticated user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.badgeListEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/me/prefs": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Get my privacy preferences",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.prefsEnvelope"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "profile"
+                ],
+                "summary": "Replace my privacy preferences",
+                "parameters": [
+                    {
+                        "description": "Preferences",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "boolean"
+                            }
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.prefsEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/notifications": {
             "get": {
                 "security": [
@@ -1538,6 +1742,17 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.badgeListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Badge"
+                    }
+                }
+            }
+        },
         "handler.blogEnvelope": {
             "type": "object",
             "properties": {
@@ -1586,6 +1801,20 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/model.CoinPack"
                     }
+                }
+            }
+        },
+        "handler.coinPackRequest": {
+            "type": "object",
+            "properties": {
+                "coins": {
+                    "type": "integer"
+                },
+                "popular": {
+                    "type": "boolean"
+                },
+                "vnd": {
+                    "type": "integer"
                 }
             }
         },
@@ -1825,6 +2054,17 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.prefsEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "boolean"
+                    }
+                }
+            }
+        },
         "handler.profileEnvelope": {
             "type": "object",
             "properties": {
@@ -2043,6 +2283,24 @@ const docTemplate = `{
                 },
                 "vnd": {
                     "type": "integer"
+                }
+            }
+        },
+        "model.Badge": {
+            "type": "object",
+            "properties": {
+                "emoji": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "tone": {
+                    "description": "son | gold | reu | ink",
+                    "type": "string"
                 }
             }
         },
