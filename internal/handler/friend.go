@@ -1,7 +1,10 @@
 package handler
 
 import (
+	"encoding/json"
 	"net/http"
+
+	"github.com/google/uuid"
 
 	"github.com/craftbyte/learning_languages/services/internal/apperror"
 	"github.com/craftbyte/learning_languages/services/internal/middleware"
@@ -64,4 +67,104 @@ func (h *FriendHandler) List(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	httputil.OK(w, rows)
+}
+
+type userMini struct {
+	ID     string `json:"id"`
+	Name   string `json:"name"`
+	Handle string `json:"handle"`
+	Elo    int    `json:"elo"`
+}
+
+type addFriendRequest struct {
+	FriendID string `json:"friend_id"`
+}
+
+// Search godoc
+//
+//	@Summary	Search users to add as friends (excludes self & existing friends)
+//	@Tags		friends
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		q	query		string	false	"name/email/handle"
+//	@Success	200	{object}	map[string][]userMini
+//	@Router		/api/v1/users/search [get]
+func (h *FriendHandler) Search(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httputil.Error(w, apperror.Unauthorized("not authenticated"))
+		return
+	}
+	users, err := h.friends.Search(r.Context(), id, r.URL.Query().Get("q"))
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	rows := make([]userMini, len(users))
+	for i, u := range users {
+		rows[i] = userMini{ID: u.ID.String(), Name: u.DisplayName, Handle: u.Handle, Elo: u.Elo}
+	}
+	httputil.OK(w, rows)
+}
+
+// Add godoc
+//
+//	@Summary	Add a friend
+//	@Tags		friends
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		body	body		addFriendRequest	true	"Friend id"
+//	@Success	204		"added"
+//	@Failure	400		{object}	errorEnvelope
+//	@Failure	404		{object}	errorEnvelope
+//	@Router		/api/v1/friends [post]
+func (h *FriendHandler) Add(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httputil.Error(w, apperror.Unauthorized("not authenticated"))
+		return
+	}
+	var req addFriendRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid request body"))
+		return
+	}
+	friendID, err := uuid.Parse(req.FriendID)
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid friend id"))
+		return
+	}
+	if err := h.friends.Add(r.Context(), id, friendID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Remove godoc
+//
+//	@Summary	Remove a friend
+//	@Tags		friends
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Friend user id"
+//	@Success	204	"removed"
+//	@Router		/api/v1/friends/{id} [delete]
+func (h *FriendHandler) Remove(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		httputil.Error(w, apperror.Unauthorized("not authenticated"))
+		return
+	}
+	friendID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid friend id"))
+		return
+	}
+	if err := h.friends.Remove(r.Context(), id, friendID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
 }

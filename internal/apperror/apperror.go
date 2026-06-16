@@ -44,6 +44,10 @@ func Conflict(msg string) *AppError {
 	return New(http.StatusConflict, msg, nil)
 }
 
+func ServiceUnavailable(msg string) *AppError {
+	return New(http.StatusServiceUnavailable, msg, nil)
+}
+
 func Internal(err error) *AppError {
 	return New(http.StatusInternalServerError, "internal server error", err)
 }

@@ -18,6 +18,9 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	TopByElo(ctx context.Context, limit int) ([]model.User, error)
 	ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error)
+	SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.User, error)
+	AddFriend(ctx context.Context, userID, friendID uuid.UUID) error
+	RemoveFriend(ctx context.Context, userID, friendID uuid.UUID) error
 	ListAll(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	Insert(ctx context.Context, u *model.User) error
 	UpdateAdminFields(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
@@ -162,4 +165,54 @@ func (r *userRepository) ListFriends(ctx context.Context, userID uuid.UUID) ([]m
 		return nil, apperror.Internal(err)
 	}
 	return friends, nil
+}
+
+func (r *userRepository) SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.User, error) {
+	const query = `
+		SELECT ` + userColumns + `
+		FROM users
+		WHERE id <> $1
+		  AND id NOT IN (SELECT friend_id FROM friendships WHERE user_id = $1)
+		  AND ($2 = '' OR display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%' OR handle ILIKE '%' || $2 || '%')
+		ORDER BY display_name
+		LIMIT $3`
+
+	rows, err := r.db.Query(ctx, query, userID, q, limit)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	defer rows.Close()
+
+	users := []model.User{}
+	for rows.Next() {
+		var u model.User
+		if err := scanUserInto(rows, &u); err != nil {
+			return nil, apperror.Internal(err)
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.Internal(err)
+	}
+	return users, nil
+}
+
+func (r *userRepository) AddFriend(ctx context.Context, userID, friendID uuid.UUID) error {
+	_, err := r.db.Exec(ctx,
+		`INSERT INTO friendships (user_id, friend_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING`,
+		userID, friendID)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+func (r *userRepository) RemoveFriend(ctx context.Context, userID, friendID uuid.UUID) error {
+	_, err := r.db.Exec(ctx,
+		`DELETE FROM friendships WHERE (user_id = $1 AND friend_id = $2) OR (user_id = $2 AND friend_id = $1)`,
+		userID, friendID)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
 }

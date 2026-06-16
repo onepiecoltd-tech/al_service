@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -12,16 +13,23 @@ import (
 )
 
 type AuthHandler struct {
-	auth service.AuthService
+	auth     service.AuthService
+	settings service.SettingService
 }
 
-func NewAuthHandler(auth service.AuthService) *AuthHandler {
-	return &AuthHandler{auth: auth}
+func NewAuthHandler(auth service.AuthService, settings service.SettingService) *AuthHandler {
+	return &AuthHandler{auth: auth, settings: settings}
 }
 
 type loginRequest struct {
 	Email    string `json:"email" example:"minhanh@email.com"`
 	Password string `json:"password" example:"password"`
+}
+
+type registerRequest struct {
+	Email    string `json:"email"`
+	Name     string `json:"name"`
+	Password string `json:"password"`
 }
 
 type loginResponse struct {
@@ -72,4 +80,51 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.OK(w, loginResponse{Token: token, User: user})
+}
+
+// Register godoc
+//
+//	@Summary		Register a new account
+//	@Description	Creates an account (if signups are open) and returns a JWT.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		registerRequest	true	"Registration"
+//	@Success		201		{object}	loginEnvelope
+//	@Failure		400		{object}	errorEnvelope
+//	@Failure		403		{object}	errorEnvelope	"signups disabled"
+//	@Failure		409		{object}	errorEnvelope	"email exists"
+//	@Router			/api/v1/auth/register [post]
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
+	if !h.signupAllowed(r.Context()) {
+		httputil.Error(w, apperror.Forbidden("đăng ký hiện đang tạm đóng"))
+		return
+	}
+
+	var req registerRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid request body"))
+		return
+	}
+
+	token, user, err := h.auth.Register(r.Context(), req.Email, req.Name, req.Password)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.Created(w, loginResponse{Token: token, User: user})
+}
+
+func (h *AuthHandler) signupAllowed(ctx context.Context) bool {
+	list, err := h.settings.List(ctx)
+	if err != nil {
+		return false
+	}
+	for _, s := range list {
+		if s.Key == "allow_signup" {
+			return s.Value
+		}
+	}
+	return true
 }

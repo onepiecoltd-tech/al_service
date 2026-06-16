@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -17,6 +18,7 @@ const tokenTTL = 24 * time.Hour
 
 type AuthService interface {
 	Login(ctx context.Context, email, password string) (string, *model.User, error)
+	Register(ctx context.Context, email, name, password string) (string, *model.User, error)
 }
 
 type authService struct {
@@ -42,6 +44,47 @@ func (s *authService) Login(ctx context.Context, email, password string) (string
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return "", nil, apperror.Unauthorized("invalid email or password")
+	}
+
+	token, err := s.issueToken(user)
+	if err != nil {
+		return "", nil, apperror.Internal(err)
+	}
+	return token, user, nil
+}
+
+// Register creates a new account and returns a signed JWT (auto-login).
+func (s *authService) Register(ctx context.Context, email, name, password string) (string, *model.User, error) {
+	email = strings.TrimSpace(strings.ToLower(email))
+	name = strings.TrimSpace(name)
+	if email == "" || name == "" {
+		return "", nil, apperror.BadRequest("email and name are required")
+	}
+	if len(password) < 6 {
+		return "", nil, apperror.BadRequest("password must be at least 6 characters")
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", nil, apperror.Internal(err)
+	}
+
+	handle := "@" + email
+	if i := strings.IndexByte(email, '@'); i > 0 {
+		handle = "@" + email[:i]
+	}
+
+	user := &model.User{
+		Email:        email,
+		DisplayName:  name,
+		PasswordHash: string(hash),
+		Handle:       handle,
+		Plan:         "Free",
+		Role:         "user",
+		Status:       "active",
+	}
+	if err := s.users.Insert(ctx, user); err != nil {
+		return "", nil, err
 	}
 
 	token, err := s.issueToken(user)

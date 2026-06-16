@@ -27,6 +27,9 @@ func (s *Server) routes() http.Handler {
 	reportRepo := repository.NewReportRepository(s.db)
 	settingRepo := repository.NewSettingRepository(s.db)
 	examRepo := repository.NewExamRepository(s.db)
+	commentRepo := repository.NewCommentRepository(s.db)
+	overviewRepo := repository.NewOverviewRepository(s.db)
+	walletRepo := repository.NewWalletRepository(s.db)
 
 	authService := service.NewAuthService(userRepo, s.cfg.JWTSecret)
 	profileService := service.NewProfileService(userRepo)
@@ -39,10 +42,13 @@ func (s *Server) routes() http.Handler {
 	reportService := service.NewReportService(reportRepo)
 	settingService := service.NewSettingService(settingRepo)
 	examService := service.NewExamService(examRepo)
+	commentService := service.NewCommentService(commentRepo)
+	overviewService := service.NewOverviewService(overviewRepo)
+	walletService := service.NewWalletService(walletRepo, giftRepo)
 
-	authHandler := handler.NewAuthHandler(authService)
+	authHandler := handler.NewAuthHandler(authService, settingService)
 	profileHandler := handler.NewProfileHandler(profileService)
-	blogHandler := handler.NewBlogHandler(blogService, profileService)
+	blogHandler := handler.NewBlogHandler(blogService, profileService, commentService)
 	leaderboardHandler := handler.NewLeaderboardHandler(leaderboardService)
 	friendHandler := handler.NewFriendHandler(friendService)
 	giftHandler := handler.NewGiftHandler(giftService)
@@ -50,21 +56,38 @@ func (s *Server) routes() http.Handler {
 	adminUserHandler := handler.NewAdminUserHandler(adminUserService)
 	adminReportHandler := handler.NewAdminReportHandler(reportService)
 	adminSettingHandler := handler.NewAdminSettingHandler(settingService)
+	statusHandler := handler.NewStatusHandler(settingService)
 	adminExamHandler := handler.NewAdminExamHandler(examService, profileService)
+	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
+	walletHandler := handler.NewWalletHandler(walletService)
+	adminRevenueHandler := handler.NewAdminRevenueHandler(walletService)
 
 	requireAdmin := middleware.AdminOnly(adminUserService.IsAdmin)
 
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
+	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.Me)))
 	mux.Handle("GET /api/v1/leaderboard", requireAuth(http.HandlerFunc(leaderboardHandler.List)))
 	mux.Handle("GET /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.List)))
+	mux.Handle("POST /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.Add)))
+	mux.Handle("DELETE /api/v1/friends/{id}", requireAuth(http.HandlerFunc(friendHandler.Remove)))
+	mux.Handle("GET /api/v1/users/search", requireAuth(http.HandlerFunc(friendHandler.Search)))
 
+	mux.HandleFunc("GET /api/v1/status", statusHandler.Status)
 	mux.HandleFunc("GET /api/v1/gifts", giftHandler.List)
+	mux.HandleFunc("GET /api/v1/coin-packs", walletHandler.CoinPacks)
+
+	mux.Handle("GET /api/v1/wallet/transactions", requireAuth(http.HandlerFunc(walletHandler.Transactions)))
+	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
+	mux.Handle("POST /api/v1/wallet/gift", requireAuth(http.HandlerFunc(walletHandler.Gift)))
 
 	mux.Handle("GET /api/v1/notifications", requireAuth(http.HandlerFunc(notificationHandler.List)))
 	mux.Handle("POST /api/v1/notifications/read", requireAuth(http.HandlerFunc(notificationHandler.MarkAllRead)))
 
+	mux.Handle("GET /api/v1/admin/overview", requireAuth(requireAdmin(http.HandlerFunc(adminOverviewHandler.Get))))
+	mux.Handle("GET /api/v1/admin/transactions", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.Transactions))))
+	mux.Handle("GET /api/v1/admin/revenue", requireAuth(requireAdmin(http.HandlerFunc(adminRevenueHandler.Revenue))))
 	mux.Handle("GET /api/v1/admin/users", requireAuth(requireAdmin(http.HandlerFunc(adminUserHandler.List))))
 	mux.Handle("POST /api/v1/admin/users", requireAuth(requireAdmin(http.HandlerFunc(adminUserHandler.Create))))
 	mux.Handle("PUT /api/v1/admin/users/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminUserHandler.Update))))
@@ -82,6 +105,8 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("GET /api/v1/blog", blogHandler.List)
 	mux.HandleFunc("GET /api/v1/blog/{id}", blogHandler.Get)
+	mux.HandleFunc("GET /api/v1/blog/{id}/comments", blogHandler.ListComments)
+	mux.Handle("POST /api/v1/blog/{id}/comments", requireAuth(http.HandlerFunc(blogHandler.AddComment)))
 	mux.Handle("POST /api/v1/blog", requireAuth(http.HandlerFunc(blogHandler.Create)))
 	mux.Handle("PUT /api/v1/blog/{id}", requireAuth(http.HandlerFunc(blogHandler.Update)))
 	mux.Handle("DELETE /api/v1/blog/{id}", requireAuth(http.HandlerFunc(blogHandler.Delete)))
@@ -92,6 +117,7 @@ func (s *Server) routes() http.Handler {
 		middleware.CORS,
 		middleware.RequestID,
 		middleware.Logger,
+		middleware.Maintenance(s.cfg.JWTSecret, settingService.IsMaintenance, adminUserService.IsAdmin),
 	)
 }
 

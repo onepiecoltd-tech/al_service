@@ -22,45 +22,78 @@ const (
 	userIDKey    contextKey = "user_id"
 )
 
+// parseToken validates the request's Bearer JWT and returns the user ID from
+// the "sub" claim. ok is false when there is no valid token.
+func parseToken(key []byte, r *http.Request) (uuid.UUID, bool) {
+	raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return uuid.Nil, false
+	}
+	token, err := jwt.Parse(raw, func(t *jwt.Token) (any, error) {
+		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+		}
+		return key, nil
+	})
+	if err != nil || !token.Valid {
+		return uuid.Nil, false
+	}
+	sub, err := token.Claims.GetSubject()
+	if err != nil {
+		return uuid.Nil, false
+	}
+	id, err := uuid.Parse(sub)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return id, true
+}
+
 // Auth validates a Bearer JWT signed with secret and puts the user ID
 // (from the "sub" claim) into the request context.
 func Auth(secret string) Middleware {
 	key := []byte(secret)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			authz := r.Header.Get("Authorization")
-			raw, ok := strings.CutPrefix(authz, "Bearer ")
+			id, ok := parseToken(key, r)
 			if !ok {
-				httputil.Error(w, apperror.Unauthorized("missing bearer token"))
+				httputil.Error(w, apperror.Unauthorized("invalid or missing token"))
 				return
 			}
-
-			token, err := jwt.Parse(raw, func(t *jwt.Token) (any, error) {
-				if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-				}
-				return key, nil
-			})
-			if err != nil || !token.Valid {
-				httputil.Error(w, apperror.Unauthorized("invalid or expired token"))
-				return
-			}
-
-			sub, err := token.Claims.GetSubject()
-			if err != nil {
-				httputil.Error(w, apperror.Unauthorized("invalid token"))
-				return
-			}
-			id, err := uuid.Parse(sub)
-			if err != nil {
-				httputil.Error(w, apperror.Unauthorized("invalid token"))
-				return
-			}
-
 			ctx := context.WithValue(r.Context(), userIDKey, id)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
 	}
+}
+
+// Maintenance returns 503 for non-admins while maintenance mode is on. Login,
+// health, status and swagger stay open so admins can sign in and toggle it off.
+func Maintenance(secret string, isMaintenance func(context.Context) bool, isAdmin func(context.Context, uuid.UUID) (bool, error)) Middleware {
+	key := []byte(secret)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !isMaintenance(r.Context()) || maintenanceExempt(r) {
+				next.ServeHTTP(w, r)
+				return
+			}
+			if id, ok := parseToken(key, r); ok {
+				if admin, _ := isAdmin(r.Context(), id); admin {
+					next.ServeHTTP(w, r)
+					return
+				}
+			}
+			httputil.Error(w, apperror.ServiceUnavailable("hệ thống đang bảo trì"))
+		})
+	}
+}
+
+func maintenanceExempt(r *http.Request) bool {
+	p := r.URL.Path
+	switch p {
+	case "/health", "/api/v1/status", "/api/v1/auth/login":
+		return true
+	}
+	return strings.HasPrefix(p, "/swagger/")
 }
 
 // UserIDFromContext returns the authenticated user ID set by Auth.

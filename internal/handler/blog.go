@@ -16,10 +16,11 @@ import (
 type BlogHandler struct {
 	blog     service.BlogService
 	profiles service.ProfileService
+	comments service.CommentService
 }
 
-func NewBlogHandler(blog service.BlogService, profiles service.ProfileService) *BlogHandler {
-	return &BlogHandler{blog: blog, profiles: profiles}
+func NewBlogHandler(blog service.BlogService, profiles service.ProfileService, comments service.CommentService) *BlogHandler {
+	return &BlogHandler{blog: blog, profiles: profiles, comments: comments}
 }
 
 type blogRequest struct {
@@ -36,6 +37,73 @@ type blogListEnvelope struct { //nolint:unused // referenced by swaggo annotatio
 
 type blogEnvelope struct { //nolint:unused // referenced by swaggo annotations only
 	Data model.BlogPost `json:"data"`
+}
+
+type commentRequest struct {
+	Body string `json:"body"`
+}
+
+type commentListEnvelope struct { //nolint:unused // referenced by swaggo annotations only
+	Data []model.Comment `json:"data"`
+}
+
+type commentEnvelope struct { //nolint:unused // referenced by swaggo annotations only
+	Data model.Comment `json:"data"`
+}
+
+// ListComments godoc
+//
+//	@Summary	List comments of a blog post
+//	@Tags		blog
+//	@Produce	json
+//	@Param		id	path		string	true	"Post ID"
+//	@Success	200	{object}	commentListEnvelope
+//	@Router		/api/v1/blog/{id}/comments [get]
+func (h *BlogHandler) ListComments(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid post id"))
+		return
+	}
+	comments, err := h.comments.List(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, comments)
+}
+
+// AddComment godoc
+//
+//	@Summary	Add a comment to a blog post
+//	@Tags		blog
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id		path		string			true	"Post ID"
+//	@Param		body	body		commentRequest	true	"Comment"
+//	@Success	201		{object}	commentEnvelope
+//	@Failure	400		{object}	errorEnvelope
+//	@Failure	401		{object}	errorEnvelope
+//	@Failure	404		{object}	errorEnvelope
+//	@Router		/api/v1/blog/{id}/comments [post]
+func (h *BlogHandler) AddComment(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid post id"))
+		return
+	}
+	var req commentRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid request body"))
+		return
+	}
+	comment, err := h.comments.Create(r.Context(), id, h.authorName(r), req.Body)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.Created(w, comment)
 }
 
 // List godoc

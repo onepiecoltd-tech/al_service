@@ -187,6 +187,36 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/overview": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Admin dashboard stats (counts + recent signups)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.overviewEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/reports": {
             "get": {
                 "security": [
@@ -294,6 +324,30 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/admin/revenue": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Revenue summary (admin)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.revenueEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/admin/settings": {
             "get": {
                 "security": [
@@ -370,6 +424,44 @@ const docTemplate = `{
                         "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/admin/transactions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "All transactions (admin, paginated)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "page",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "limit",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.adminTxnListEnvelope"
                         }
                     }
                 }
@@ -575,6 +667,58 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "invalid email or password",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/auth/register": {
+            "post": {
+                "description": "Creates an account (if signups are open) and returns a JWT.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "auth"
+                ],
+                "summary": "Register a new account",
+                "parameters": [
+                    {
+                        "description": "Registration",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.registerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handler.loginEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    },
+                    "403": {
+                        "description": "signups disabled",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    },
+                    "409": {
+                        "description": "email exists",
                         "schema": {
                             "$ref": "#/definitions/handler.errorEnvelope"
                         }
@@ -798,6 +942,114 @@ const docTemplate = `{
                 }
             }
         },
+        "/api/v1/blog/{id}/comments": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "blog"
+                ],
+                "summary": "List comments of a blog post",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Post ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.commentListEnvelope"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "blog"
+                ],
+                "summary": "Add a comment to a blog post",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Post ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Comment",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.commentRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handler.commentEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/coin-packs": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "List coin packs",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.coinPackListEnvelope"
+                        }
+                    }
+                }
+            }
+        },
         "/api/v1/friends": {
             "get": {
                 "security": [
@@ -824,6 +1076,81 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/handler.errorEnvelope"
                         }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Add a friend",
+                "parameters": [
+                    {
+                        "description": "Friend id",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.addFriendRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "added"
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/friends/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Remove a friend",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Friend user id",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "removed"
                     }
                 }
             }
@@ -963,9 +1290,203 @@ const docTemplate = `{
                     }
                 }
             }
+        },
+        "/api/v1/status": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Public app status (feature flags that affect all clients)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.statusEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/users/search": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "friends"
+                ],
+                "summary": "Search users to add as friends (excludes self \u0026 existing friends)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "name/email/handle",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": {
+                                "type": "array",
+                                "items": {
+                                    "$ref": "#/definitions/handler.userMini"
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/wallet/gift": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Send a gift (spend coins)",
+                "parameters": [
+                    {
+                        "description": "Gift id",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.giftRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.topupResultEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "insufficient coins",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/wallet/topup": {
+            "post": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "Buy a coin pack (mock PayOS)",
+                "parameters": [
+                    {
+                        "description": "Pack id",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handler.topupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.topupResultEnvelope"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handler.errorEnvelope"
+                        }
+                    }
+                }
+            }
+        },
+        "/api/v1/wallet/transactions": {
+            "get": {
+                "security": [
+                    {
+                        "BearerAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "wallet"
+                ],
+                "summary": "My wallet transactions",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handler.txnListEnvelope"
+                        }
+                    }
+                }
+            }
         }
     },
     "definitions": {
+        "handler.addFriendRequest": {
+            "type": "object",
+            "properties": {
+                "friend_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.adminTxnListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.AdminTransaction"
+                    }
+                }
+            }
+        },
         "handler.adminUserEnvelope": {
             "type": "object",
             "properties": {
@@ -1053,6 +1574,44 @@ const docTemplate = `{
                     "example": "published"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.coinPackListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.CoinPack"
+                    }
+                }
+            }
+        },
+        "handler.commentEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/model.Comment"
+                }
+            }
+        },
+        "handler.commentListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Comment"
+                    }
+                }
+            }
+        },
+        "handler.commentRequest": {
+            "type": "object",
+            "properties": {
+                "body": {
                     "type": "string"
                 }
             }
@@ -1173,6 +1732,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.giftRequest": {
+            "type": "object",
+            "properties": {
+                "gift_id": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.leaderboardEnvelope": {
             "type": "object",
             "properties": {
@@ -1250,6 +1817,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.overviewEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/model.Overview"
+                }
+            }
+        },
         "handler.profileEnvelope": {
             "type": "object",
             "properties": {
@@ -1296,6 +1871,20 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.registerRequest": {
+            "type": "object",
+            "properties": {
+                "email": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "password": {
+                    "type": "string"
+                }
+            }
+        },
         "handler.reportListEnvelope": {
             "type": "object",
             "properties": {
@@ -1316,6 +1905,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handler.revenueEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/model.RevenueSummary"
+                }
+            }
+        },
         "handler.settingListEnvelope": {
             "type": "object",
             "properties": {
@@ -1323,6 +1920,52 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/model.Setting"
+                    }
+                }
+            }
+        },
+        "handler.statusEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/handler.statusResponse"
+                }
+            }
+        },
+        "handler.statusResponse": {
+            "type": "object",
+            "properties": {
+                "allow_signup": {
+                    "type": "boolean"
+                },
+                "maintenance": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "handler.topupRequest": {
+            "type": "object",
+            "properties": {
+                "pack_id": {
+                    "type": "string"
+                }
+            }
+        },
+        "handler.topupResultEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/service.TopupResult"
+                }
+            }
+        },
+        "handler.txnListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.Transaction"
                     }
                 }
             }
@@ -1349,6 +1992,57 @@ const docTemplate = `{
                 "status": {
                     "type": "string",
                     "example": "active"
+                }
+            }
+        },
+        "handler.userMini": {
+            "type": "object",
+            "properties": {
+                "elo": {
+                    "type": "integer"
+                },
+                "handle": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.AdminTransaction": {
+            "type": "object",
+            "properties": {
+                "coins": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "topup | gift",
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "ok | failed",
+                    "type": "string"
+                },
+                "user": {
+                    "type": "string"
+                },
+                "vnd": {
+                    "type": "integer"
                 }
             }
         },
@@ -1384,6 +2078,43 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "model.CoinPack": {
+            "type": "object",
+            "properties": {
+                "coins": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "popular": {
+                    "type": "boolean"
+                },
+                "vnd": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.Comment": {
+            "type": "object",
+            "properties": {
+                "author": {
+                    "type": "string"
+                },
+                "body": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "post_id": {
                     "type": "string"
                 }
             }
@@ -1459,6 +2190,52 @@ const docTemplate = `{
                 }
             }
         },
+        "model.Overview": {
+            "type": "object",
+            "properties": {
+                "exams_review": {
+                    "type": "integer"
+                },
+                "posts_total": {
+                    "type": "integer"
+                },
+                "pro_total": {
+                    "type": "integer"
+                },
+                "recent_users": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/model.RecentUser"
+                    }
+                },
+                "reports_open": {
+                    "type": "integer"
+                },
+                "users_total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "model.RecentUser": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "email": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "plan": {
+                    "type": "string"
+                }
+            }
+        },
         "model.Report": {
             "type": "object",
             "properties": {
@@ -1491,6 +2268,23 @@ const docTemplate = `{
                 }
             }
         },
+        "model.RevenueSummary": {
+            "type": "object",
+            "properties": {
+                "month_vnd": {
+                    "type": "integer"
+                },
+                "pro_total": {
+                    "type": "integer"
+                },
+                "today_vnd": {
+                    "type": "integer"
+                },
+                "topups_month": {
+                    "type": "integer"
+                }
+            }
+        },
         "model.Setting": {
             "type": "object",
             "properties": {
@@ -1505,6 +2299,37 @@ const docTemplate = `{
                 },
                 "value": {
                     "type": "boolean"
+                }
+            }
+        },
+        "model.Transaction": {
+            "type": "object",
+            "properties": {
+                "coins": {
+                    "type": "integer"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "description": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "kind": {
+                    "description": "topup | gift",
+                    "type": "string"
+                },
+                "method": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "ok | failed",
+                    "type": "string"
+                },
+                "vnd": {
+                    "type": "integer"
                 }
             }
         },
@@ -1554,6 +2379,17 @@ const docTemplate = `{
                 },
                 "wins": {
                     "type": "integer"
+                }
+            }
+        },
+        "service.TopupResult": {
+            "type": "object",
+            "properties": {
+                "coins": {
+                    "type": "integer"
+                },
+                "transaction": {
+                    "$ref": "#/definitions/model.Transaction"
                 }
             }
         }
