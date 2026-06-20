@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"github.com/craftbyte/learning_languages/services/internal/apperror"
 	"github.com/craftbyte/learning_languages/services/internal/middleware"
 	"github.com/craftbyte/learning_languages/services/internal/model"
 	"github.com/craftbyte/learning_languages/services/internal/service"
@@ -31,9 +30,8 @@ type badgeListEnvelope struct { //nolint:unused // referenced by swaggo annotati
 //	@Success	200	{object}	badgeListEnvelope
 //	@Router		/api/v1/me/badges [get]
 func (h *BadgeHandler) Me(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	badges, err := h.badges.ListByUser(r.Context(), id)

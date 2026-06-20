@@ -3,7 +3,6 @@ package handler
 import (
 	"net/http"
 
-	"github.com/craftbyte/learning_languages/services/internal/apperror"
 	"github.com/craftbyte/learning_languages/services/internal/middleware"
 	"github.com/craftbyte/learning_languages/services/internal/model"
 	"github.com/craftbyte/learning_languages/services/internal/service"
@@ -32,9 +31,8 @@ type notificationListEnvelope struct { //nolint:unused // referenced by swaggo a
 //	@Failure	401	{object}	errorEnvelope
 //	@Router		/api/v1/notifications [get]
 func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	items, err := h.notifications.List(r.Context(), id)
@@ -55,9 +53,8 @@ func (h *NotificationHandler) List(w http.ResponseWriter, r *http.Request) {
 //	@Failure	401	{object}	errorEnvelope
 //	@Router		/api/v1/notifications/read [post]
 func (h *NotificationHandler) MarkAllRead(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	if err := h.notifications.MarkAllRead(r.Context(), id); err != nil {

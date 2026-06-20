@@ -43,9 +43,8 @@ type friendListEnvelope struct { //nolint:unused // referenced by swaggo annotat
 //	@Failure	401	{object}	errorEnvelope
 //	@Router		/api/v1/friends [get]
 func (h *FriendHandler) List(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 
@@ -90,9 +89,8 @@ type addFriendRequest struct {
 //	@Success	200	{object}	map[string][]userMini
 //	@Router		/api/v1/users/search [get]
 func (h *FriendHandler) Search(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	users, err := h.friends.Search(r.Context(), id, r.URL.Query().Get("q"))
@@ -120,9 +118,8 @@ func (h *FriendHandler) Search(w http.ResponseWriter, r *http.Request) {
 //	@Failure	404		{object}	errorEnvelope
 //	@Router		/api/v1/friends [post]
 func (h *FriendHandler) Add(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	var req addFriendRequest
@@ -152,9 +149,8 @@ func (h *FriendHandler) Add(w http.ResponseWriter, r *http.Request) {
 //	@Success	204	"removed"
 //	@Router		/api/v1/friends/{id} [delete]
 func (h *FriendHandler) Remove(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	friendID, err := uuid.Parse(r.PathValue("id"))

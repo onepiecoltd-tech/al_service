@@ -47,9 +47,8 @@ type profileEnvelope struct { //nolint:unused // referenced by swaggo annotation
 //	@Failure		401	{object}	errorEnvelope	"missing or invalid token"
 //	@Router			/api/v1/me [get]
 func (h *ProfileHandler) Me(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 
@@ -87,9 +86,8 @@ type prefsEnvelope struct { //nolint:unused // referenced by swaggo annotations 
 //	@Success	200	{object}	prefsEnvelope
 //	@Router		/api/v1/me/prefs [get]
 func (h *ProfileHandler) GetPrefs(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	prefs, err := h.profiles.GetPrefs(r.Context(), id)
@@ -111,9 +109,8 @@ func (h *ProfileHandler) GetPrefs(w http.ResponseWriter, r *http.Request) {
 //	@Success	200		{object}	prefsEnvelope
 //	@Router		/api/v1/me/prefs [put]
 func (h *ProfileHandler) SetPrefs(w http.ResponseWriter, r *http.Request) {
-	id, ok := middleware.UserIDFromContext(r.Context())
+	id, ok := middleware.RequireUserID(w, r)
 	if !ok {
-		httputil.Error(w, apperror.Unauthorized("not authenticated"))
 		return
 	}
 	var prefs map[string]bool

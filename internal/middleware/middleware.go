@@ -102,6 +102,16 @@ func UserIDFromContext(ctx context.Context) (uuid.UUID, bool) {
 	return id, ok
 }
 
+// RequireUserID returns the authenticated user ID, or writes a 401 and returns
+// ok=false. Handlers: id, ok := RequireUserID(w, r); if !ok { return }.
+func RequireUserID(w http.ResponseWriter, r *http.Request) (uuid.UUID, bool) {
+	id, ok := UserIDFromContext(r.Context())
+	if !ok {
+		httputil.Error(w, apperror.Unauthorized("not authenticated"))
+	}
+	return id, ok
+}
+
 // AdminOnly rejects requests whose authenticated user is not an admin/mod.
 // Must run after Auth. isAdmin is supplied by the service layer.
 func AdminOnly(isAdmin func(context.Context, uuid.UUID) (bool, error)) Middleware {
