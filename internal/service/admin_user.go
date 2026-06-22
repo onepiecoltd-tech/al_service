@@ -24,6 +24,7 @@ type NewUserInput struct {
 type AdminUserService interface {
 	List(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	IsAdmin(ctx context.Context, id uuid.UUID) (bool, error)
+	IsActive(ctx context.Context, id uuid.UUID) (bool, error)
 	Create(ctx context.Context, in NewUserInput) (*model.User, error)
 	Update(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
 }
@@ -50,6 +51,14 @@ func (s *adminUserService) IsAdmin(ctx context.Context, id uuid.UUID) (bool, err
 		return false, err
 	}
 	return u.Role == "admin" || u.Role == "mod", nil
+}
+
+func (s *adminUserService) IsActive(ctx context.Context, id uuid.UUID) (bool, error) {
+	u, err := s.users.FindByID(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	return u.Status == "active", nil
 }
 
 func (s *adminUserService) Create(ctx context.Context, in NewUserInput) (*model.User, error) {

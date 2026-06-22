@@ -52,6 +52,9 @@ func (s *authService) Login(ctx context.Context, email, password string) (string
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(password)); err != nil {
 		return "", nil, apperror.Unauthorized("invalid email or password")
 	}
+	if user.Status != "active" {
+		return "", nil, apperror.Forbidden("tài khoản đã bị khóa")
+	}
 
 	token, err := s.issueToken(user)
 	if err != nil {
@@ -125,6 +128,9 @@ func (s *authService) LoginWithGoogle(ctx context.Context, idTokenStr string) (s
 		if err != nil {
 			return "", nil, err
 		}
+	}
+	if user.Status != "active" {
+		return "", nil, apperror.Forbidden("tài khoản đã bị khóa")
 	}
 
 	token, err := s.issueToken(user)

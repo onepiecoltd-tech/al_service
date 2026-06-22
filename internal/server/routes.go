@@ -18,8 +18,6 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("GET /health", s.handleHealth)
 
-	requireAuth := middleware.Auth(s.cfg.JWTSecret)
-
 	userRepo := repository.NewUserRepository(s.db)
 	blogRepo := repository.NewBlogRepository(s.db)
 	giftRepo := repository.NewGiftRepository(s.db)
@@ -41,6 +39,7 @@ func (s *Server) routes() http.Handler {
 	giftService := service.NewGiftService(giftRepo)
 	notificationService := service.NewNotificationService(notificationRepo)
 	adminUserService := service.NewAdminUserService(userRepo)
+	requireAuth := middleware.Auth(s.cfg.JWTSecret, adminUserService.IsActive)
 	reportService := service.NewReportService(reportRepo)
 	settingService := service.NewSettingService(settingRepo)
 	aiClient := service.NewGeminiClient(s.cfg.GeminiAPIKey)

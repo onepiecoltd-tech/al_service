@@ -49,15 +49,22 @@ func parseToken(key []byte, r *http.Request) (uuid.UUID, bool) {
 	return id, true
 }
 
-// Auth validates a Bearer JWT signed with secret and puts the user ID
-// (from the "sub" claim) into the request context.
-func Auth(secret string) Middleware {
+// Auth validates a Bearer JWT signed with secret, puts the user ID (from the
+// "sub" claim) into the request context, and rejects the request if the
+// account has since been banned — isActive is checked on every request so a
+// ban takes effect immediately, not just on next login.
+func Auth(secret string, isActive func(context.Context, uuid.UUID) (bool, error)) Middleware {
 	key := []byte(secret)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			id, ok := parseToken(key, r)
 			if !ok {
 				httputil.Error(w, apperror.Unauthorized("invalid or missing token"))
+				return
+			}
+			active, err := isActive(r.Context(), id)
+			if err != nil || !active {
+				httputil.Error(w, apperror.Forbidden("tài khoản đã bị khóa"))
 				return
 			}
 			ctx := context.WithValue(r.Context(), userIDKey, id)
