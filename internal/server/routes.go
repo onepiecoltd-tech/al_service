@@ -33,7 +33,7 @@ func (s *Server) routes() http.Handler {
 	walletRepo := repository.NewWalletRepository(s.db)
 	badgeRepo := repository.NewBadgeRepository(s.db)
 
-	authService := service.NewAuthService(userRepo, s.cfg.JWTSecret)
+	authService := service.NewAuthService(userRepo, s.cfg.JWTSecret, s.cfg.GoogleClientID)
 	profileService := service.NewProfileService(userRepo)
 	blogService := service.NewBlogService(blogRepo)
 	leaderboardService := service.NewLeaderboardService(userRepo)
@@ -43,7 +43,7 @@ func (s *Server) routes() http.Handler {
 	adminUserService := service.NewAdminUserService(userRepo)
 	reportService := service.NewReportService(reportRepo)
 	settingService := service.NewSettingService(settingRepo)
-	aiClient := service.NewAnthropicClient(s.cfg.AnthropicAPIKey)
+	aiClient := service.NewGeminiClient(s.cfg.GeminiAPIKey)
 	examService := service.NewExamService(examRepo, questionRepo, aiClient)
 	commentService := service.NewCommentService(commentRepo)
 	overviewService := service.NewOverviewService(overviewRepo)
@@ -71,6 +71,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.HandleFunc("POST /api/v1/auth/login", authHandler.Login)
 	mux.HandleFunc("POST /api/v1/auth/register", authHandler.Register)
+	mux.HandleFunc("POST /api/v1/auth/google", authHandler.GoogleLogin)
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.Me)))
 	mux.Handle("GET /api/v1/me/badges", requireAuth(http.HandlerFunc(badgeHandler.Me)))

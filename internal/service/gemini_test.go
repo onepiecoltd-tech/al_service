@@ -7,18 +7,18 @@ import (
 	"testing"
 )
 
-func TestExtractQuestionsParsesToolUse(t *testing.T) {
+func TestExtractQuestionsParsesGeminiResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
-		w.Write([]byte(`{"content":[{"type":"tool_use","name":"extract_questions","input":{"questions":[{"prompt":"What is your job?","sample_answer":"I'm a teacher."},{"prompt":"  "},{"prompt":"Describe your hometown.","sample_answer":""}]}}]}`))
+		w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"questions\":[{\"prompt\":\"What is your job?\",\"sample_answer\":\"I'm a teacher.\"},{\"prompt\":\"  \"},{\"prompt\":\"Describe your hometown.\",\"sample_answer\":\"\"}]}"}]}}]}`))
 	}))
 	defer srv.Close()
 
-	c := NewAnthropicClient("test-key")
+	c := NewGeminiClient("test-key")
 	c.http = srv.Client()
-	origURL := anthropicAPIURLOverride
-	anthropicAPIURLOverride = srv.URL
-	defer func() { anthropicAPIURLOverride = origURL }()
+	origURL := geminiAPIURLOverride
+	geminiAPIURLOverride = srv.URL
+	defer func() { geminiAPIURLOverride = origURL }()
 
 	qs, err := c.ExtractQuestions(context.Background(), "exam.txt", []byte("Q1: What is your job?"))
 	if err != nil {
@@ -36,7 +36,7 @@ func TestExtractQuestionsParsesToolUse(t *testing.T) {
 }
 
 func TestExtractQuestionsRejectsUnsupportedExt(t *testing.T) {
-	c := NewAnthropicClient("test-key")
+	c := NewGeminiClient("test-key")
 	if _, err := c.ExtractQuestions(context.Background(), "exam.docx", []byte("x")); err == nil {
 		t.Fatal("want error for unsupported extension")
 	}

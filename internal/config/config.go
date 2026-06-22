@@ -10,7 +10,8 @@ type Config struct {
 	HTTPAddr        string
 	DB              DBConfig
 	JWTSecret       string
-	AnthropicAPIKey string
+	GeminiAPIKey    string
+	GoogleClientID  string
 }
 
 type DBConfig struct {
@@ -43,6 +44,7 @@ func Load() (*Config, error) {
 		HTTPAddr:        ":" + port,
 		DB:              DBConfig{DSN: dsn},
 		JWTSecret:       jwtSecret,
-		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
+		GeminiAPIKey:    os.Getenv("GEMINI_API_KEY"),
+		GoogleClientID:  os.Getenv("GOOGLE_CLIENT_ID"),
 	}, nil
 }

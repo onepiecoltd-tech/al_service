@@ -17,7 +17,7 @@ type ExamService interface {
 	Create(ctx context.Context, e *model.Exam) error
 	Update(ctx context.Context, e *model.Exam) (*model.Exam, error)
 	Delete(ctx context.Context, id uuid.UUID) error
-	// Import uses Claude to extract questions from an uploaded exam file (.pdf or .txt),
+	// Import uses Gemini to extract questions from an uploaded exam file (.pdf or .txt),
 	// replaces the exam's question bank, and updates its question count.
 	Import(ctx context.Context, examID uuid.UUID, filename string, data []byte) ([]model.Question, error)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
@@ -26,10 +26,10 @@ type ExamService interface {
 type examService struct {
 	repo      repository.ExamRepository
 	questions repository.QuestionRepository
-	ai        *AnthropicClient
+	ai        *GeminiClient
 }
 
-func NewExamService(repo repository.ExamRepository, questions repository.QuestionRepository, ai *AnthropicClient) ExamService {
+func NewExamService(repo repository.ExamRepository, questions repository.QuestionRepository, ai *GeminiClient) ExamService {
 	return &examService{repo: repo, questions: questions, ai: ai}
 }
 

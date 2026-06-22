@@ -32,6 +32,10 @@ type registerRequest struct {
 	Password string `json:"password"`
 }
 
+type googleLoginRequest struct {
+	IDToken string `json:"id_token"`
+}
+
 type loginResponse struct {
 	Token string      `json:"token"`
 	User  *model.User `json:"user"`
@@ -114,6 +118,34 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.Created(w, loginResponse{Token: token, User: user})
+}
+
+// GoogleLogin godoc
+//
+//	@Summary		Log in with a Google ID token
+//	@Description	Verifies a Google Identity Services ID token and returns a JWT, creating the account on first sign-in.
+//	@Tags			auth
+//	@Accept			json
+//	@Produce		json
+//	@Param			body	body		googleLoginRequest	true	"Google ID token"
+//	@Success		200		{object}	loginEnvelope
+//	@Failure		400		{object}	errorEnvelope
+//	@Failure		401		{object}	errorEnvelope	"invalid Google token"
+//	@Router			/api/v1/auth/google [post]
+func (h *AuthHandler) GoogleLogin(w http.ResponseWriter, r *http.Request) {
+	var req googleLoginRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.IDToken) == "" {
+		httputil.Error(w, apperror.BadRequest("invalid request body"))
+		return
+	}
+
+	token, user, err := h.auth.LoginWithGoogle(r.Context(), req.IDToken)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+
+	httputil.OK(w, loginResponse{Token: token, User: user})
 }
 
 func (h *AuthHandler) signupAllowed(ctx context.Context) bool {
