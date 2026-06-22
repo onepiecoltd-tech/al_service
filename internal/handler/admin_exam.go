@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"io"
 	"net/http"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -56,6 +58,30 @@ func (h *AdminExamHandler) List(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.Paginated(w, exams, page, limit, total)
+}
+
+// Get godoc
+//
+//	@Summary	Get an exam (admin)
+//	@Tags		admin
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path		string	true	"Exam ID"
+//	@Success	200	{object}	examEnvelope
+//	@Failure	404	{object}	errorEnvelope
+//	@Router		/api/v1/admin/exams/{id} [get]
+func (h *AdminExamHandler) Get(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid exam id"))
+		return
+	}
+	exam, err := h.exams.Get(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, exam)
 }
 
 // Create godoc
@@ -147,6 +173,76 @@ func (h *AdminExamHandler) Delete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// Import godoc
+//
+//	@Summary	Import questions into an exam using AI extraction (admin)
+//	@Tags		admin
+//	@Accept		mpfd
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id		path		string	true	"Exam ID"
+//	@Param		file	formData	file	true	"Exam file (.pdf or .txt)"
+//	@Success	200	{object}	map[string]interface{}
+//	@Failure	400	{object}	errorEnvelope
+//	@Failure	404	{object}	errorEnvelope
+//	@Router		/api/v1/admin/exams/{id}/import [post]
+func (h *AdminExamHandler) Import(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid exam id"))
+		return
+	}
+	// AI extraction can take 1-2+ minutes for large PDFs — extend past the
+	// server's default 30s WriteTimeout for this handler only.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Now().Add(4 * time.Minute))
+	r.Body = http.MaxBytesReader(w, r.Body, 5<<20) // 5 MB cap
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		if err.Error() == "http: request body too large" {
+			httputil.Error(w, apperror.BadRequest("tệp vượt quá giới hạn 5MB"))
+			return
+		}
+		httputil.Error(w, apperror.BadRequest("thiếu tệp đề thi (field \"file\")"))
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(file)
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("không đọc được tệp tải lên"))
+		return
+	}
+	qs, err := h.exams.Import(r.Context(), id, header.Filename, data)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]any{"imported": len(qs), "questions": qs})
+}
+
+// Questions godoc
+//
+//	@Summary	List an exam's questions (admin)
+//	@Tags		admin
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Exam ID"
+//	@Success	200	{object}	map[string][]model.Question
+//	@Router		/api/v1/admin/exams/{id}/questions [get]
+func (h *AdminExamHandler) Questions(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid exam id"))
+		return
+	}
+	qs, err := h.exams.Questions(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, qs)
 }
 
 func (h *AdminExamHandler) authorName(r *http.Request) string {

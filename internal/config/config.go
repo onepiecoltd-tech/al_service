@@ -6,10 +6,11 @@ import (
 )
 
 type Config struct {
-	Env      string
-	HTTPAddr  string
-	DB        DBConfig
-	JWTSecret string
+	Env             string
+	HTTPAddr        string
+	DB              DBConfig
+	JWTSecret       string
+	AnthropicAPIKey string
 }
 
 type DBConfig struct {
@@ -38,9 +39,10 @@ func Load() (*Config, error) {
 	}
 
 	return &Config{
-		Env:      env,
-		HTTPAddr:  ":" + port,
-		DB:        DBConfig{DSN: dsn},
-		JWTSecret: jwtSecret,
+		Env:             env,
+		HTTPAddr:        ":" + port,
+		DB:              DBConfig{DSN: dsn},
+		JWTSecret:       jwtSecret,
+		AnthropicAPIKey: os.Getenv("ANTHROPIC_API_KEY"),
 	}, nil
 }

@@ -12,6 +12,7 @@ import (
 
 type ExamRepository interface {
 	List(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
+	Get(ctx context.Context, id uuid.UUID) (*model.Exam, error)
 	Create(ctx context.Context, e *model.Exam) error
 	Update(ctx context.Context, e *model.Exam) (*model.Exam, error)
 	Delete(ctx context.Context, id uuid.UUID) error
@@ -51,6 +52,16 @@ func (r *examRepository) List(ctx context.Context, limit, offset int) ([]model.E
 		return nil, 0, apperror.Internal(err)
 	}
 	return exams, total, nil
+}
+
+func (r *examRepository) Get(ctx context.Context, id uuid.UUID) (*model.Exam, error) {
+	var e model.Exam
+	err := r.db.QueryRow(ctx, `SELECT `+examColumns+` FROM exams WHERE id = $1`, id).
+		Scan(&e.ID, &e.Name, &e.Type, &e.Questions, &e.Author, &e.State, &e.CreatedAt)
+	if err != nil {
+		return nil, apperror.NotFound("exam not found")
+	}
+	return &e, nil
 }
 
 func (r *examRepository) Create(ctx context.Context, e *model.Exam) error {
