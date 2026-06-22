@@ -21,6 +21,13 @@ type ExamService interface {
 	// replaces the exam's question bank, and updates its question count.
 	Import(ctx context.Context, examID uuid.UUID, filename string, data []byte) ([]model.Question, error)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
+	// ListMine returns only the exams owned by the given user.
+	ListMine(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error)
+	// Upload creates a user-owned exam from an uploaded file and imports its questions.
+	Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error)
+	// GetOwned returns the exam only if it belongs to ownerID, else NotFound
+	// (never leaks existence of another user's exam).
+	GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error)
 }
 
 type examService struct {
@@ -54,6 +61,50 @@ func (s *examService) Import(ctx context.Context, examID uuid.UUID, filename str
 
 func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {
 	return s.questions.ListByExam(ctx, examID)
+}
+
+func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error) {
+	return s.repo.ListByOwner(ctx, ownerID, limit, offset)
+}
+
+func (s *examService) Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error) {
+	if strings.TrimSpace(name) == "" {
+		name = strings.TrimSuffix(filename, fileExt(filename))
+	}
+	if strings.TrimSpace(name) == "" {
+		return nil, nil, apperror.BadRequest("thiếu tên đề")
+	}
+	// Extract first so a bad file never leaves an empty exam behind.
+	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
+	if err != nil {
+		return nil, nil, err
+	}
+	exam := &model.Exam{
+		Name:      name,
+		Type:      "Tự tải lên",
+		Questions: len(qs),
+		Author:    author,
+		State:     "published",
+		OwnerID:   &ownerID,
+	}
+	if err := s.repo.Create(ctx, exam); err != nil {
+		return nil, nil, err
+	}
+	if err := s.questions.ReplaceForExam(ctx, exam.ID, qs); err != nil {
+		return nil, nil, err
+	}
+	return exam, qs, nil
+}
+
+func (s *examService) GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error) {
+	exam, err := s.repo.Get(ctx, examID)
+	if err != nil {
+		return nil, err
+	}
+	if exam.OwnerID == nil || *exam.OwnerID != ownerID {
+		return nil, apperror.NotFound("exam not found")
+	}
+	return exam, nil
 }
 
 func (s *examService) List(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {

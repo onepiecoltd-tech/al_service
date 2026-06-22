@@ -61,6 +61,7 @@ func (s *Server) routes() http.Handler {
 	adminSettingHandler := handler.NewAdminSettingHandler(settingService)
 	statusHandler := handler.NewStatusHandler(settingService)
 	adminExamHandler := handler.NewAdminExamHandler(examService, profileService)
+	examHandler := handler.NewExamHandler(examService, profileService)
 	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
 	walletHandler := handler.NewWalletHandler(walletService)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
@@ -89,6 +90,10 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/wallet/transactions", requireAuth(http.HandlerFunc(walletHandler.Transactions)))
 	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
 	mux.Handle("POST /api/v1/wallet/gift", requireAuth(http.HandlerFunc(walletHandler.Gift)))
+
+	mux.Handle("GET /api/v1/exams/mine", requireAuth(http.HandlerFunc(examHandler.Mine)))
+	mux.Handle("POST /api/v1/exams/upload", requireAuth(http.HandlerFunc(examHandler.Upload)))
+	mux.Handle("GET /api/v1/exams/{id}", requireAuth(http.HandlerFunc(examHandler.Get)))
 
 	mux.Handle("GET /api/v1/notifications", requireAuth(http.HandlerFunc(notificationHandler.List)))
 	mux.Handle("POST /api/v1/notifications/read", requireAuth(http.HandlerFunc(notificationHandler.MarkAllRead)))
