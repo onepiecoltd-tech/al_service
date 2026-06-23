@@ -7,6 +7,7 @@ import (
 
 	"github.com/craftbyte/learning_languages/services/internal/apperror"
 	"github.com/craftbyte/learning_languages/services/internal/middleware"
+	"github.com/craftbyte/learning_languages/services/internal/model"
 	"github.com/craftbyte/learning_languages/services/internal/service"
 	"github.com/craftbyte/learning_languages/services/pkg/httputil"
 )
@@ -29,6 +30,7 @@ type profileResponse struct {
 	Elo    int    `json:"elo"`
 	Rank   string `json:"rank"`
 	Streak int    `json:"streak"`
+	Wins   int    `json:"wins"`
 	Role   string `json:"role"`
 	Joined string `json:"joined"`
 }
@@ -57,8 +59,11 @@ func (h *ProfileHandler) Me(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
+	httputil.OK(w, toProfileResponse(u))
+}
 
-	httputil.OK(w, profileResponse{
+func toProfileResponse(u *model.User) profileResponse {
+	return profileResponse{
 		ID:     u.ID.String(),
 		Email:  u.Email,
 		Name:   u.DisplayName,
@@ -68,9 +73,41 @@ func (h *ProfileHandler) Me(w http.ResponseWriter, r *http.Request) {
 		Elo:    u.Elo,
 		Rank:   rankFromElo(u.Elo),
 		Streak: u.Streak,
+		Wins:   u.Wins,
 		Role:   u.Role,
 		Joined: fmt.Sprintf("Tháng %d, %d", int(u.CreatedAt.Month()), u.CreatedAt.Year()),
-	})
+	}
+}
+
+// UpdateMe godoc
+//
+//	@Summary	Update the authenticated user's display name
+//	@Tags		profile
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		body	body		object{name=string}	true	"New display name"
+//	@Success	200		{object}	profileEnvelope
+//	@Failure	400		{object}	errorEnvelope
+//	@Router		/api/v1/me [put]
+func (h *ProfileHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Name string `json:"name"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.Error(w, apperror.BadRequest("dữ liệu không hợp lệ"))
+		return
+	}
+	u, err := h.profiles.UpdateDisplayName(r.Context(), id, body.Name)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, toProfileResponse(u))
 }
 
 type prefsEnvelope struct { //nolint:unused // referenced by swaggo annotations only

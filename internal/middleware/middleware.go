@@ -73,6 +73,21 @@ func Auth(secret string, isActive func(context.Context, uuid.UUID) (bool, error)
 	}
 }
 
+// OptionalAuth puts the user ID into the request context if a valid Bearer
+// JWT is present, but never rejects the request — for endpoints that are
+// public but behave differently for logged-in (e.g. admin) callers.
+func OptionalAuth(secret string) Middleware {
+	key := []byte(secret)
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if id, ok := parseToken(key, r); ok {
+				r = r.WithContext(context.WithValue(r.Context(), userIDKey, id))
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
 // Maintenance returns 503 for non-admins while maintenance mode is on. Login,
 // health, status and swagger stay open so admins can sign in and toggle it off.
 func Maintenance(secret string, isMaintenance func(context.Context) bool, isAdmin func(context.Context, uuid.UUID) (bool, error)) Middleware {

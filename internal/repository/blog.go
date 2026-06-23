@@ -13,7 +13,9 @@ import (
 )
 
 type BlogRepository interface {
-	List(ctx context.Context, limit, offset int) ([]model.BlogPost, int, error)
+	// List returns posts, optionally filtered by category and/or status
+	// ("" means no filter on that field).
+	List(ctx context.Context, category, status string, limit, offset int) ([]model.BlogPost, int, error)
 	Get(ctx context.Context, id uuid.UUID) (*model.BlogPost, error)
 	Create(ctx context.Context, p *model.BlogPost) error
 	Update(ctx context.Context, p *model.BlogPost) error
@@ -45,13 +47,17 @@ func scanBlog(row pgx.Row) (*model.BlogPost, error) {
 	return &p, nil
 }
 
-func (r *blogRepository) List(ctx context.Context, limit, offset int) ([]model.BlogPost, int, error) {
+func (r *blogRepository) List(ctx context.Context, category, status string, limit, offset int) ([]model.BlogPost, int, error) {
 	var total int
-	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM blog_posts`).Scan(&total); err != nil {
+	if err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM blog_posts WHERE ($1 = '' OR category = $1) AND ($2 = '' OR status = $2)`,
+		category, status).Scan(&total); err != nil {
 		return nil, 0, apperror.Internal(err)
 	}
 
-	rows, err := r.db.Query(ctx, `SELECT `+blogColumns+` FROM blog_posts ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
+	rows, err := r.db.Query(ctx,
+		`SELECT `+blogColumns+` FROM blog_posts WHERE ($1 = '' OR category = $1) AND ($2 = '' OR status = $2) ORDER BY created_at DESC LIMIT $3 OFFSET $4`,
+		category, status, limit, offset)
 	if err != nil {
 		return nil, 0, apperror.Internal(err)
 	}

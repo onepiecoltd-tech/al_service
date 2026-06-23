@@ -111,13 +111,21 @@ func (h *BlogHandler) AddComment(w http.ResponseWriter, r *http.Request) {
 //	@Summary	List blog posts (paginated)
 //	@Tags		blog
 //	@Produce	json
-//	@Param		page	query		int	false	"page (default 1)"
-//	@Param		limit	query		int	false	"limit (default 20, max 100)"
+//	@Param		page		query		int		false	"page (default 1)"
+//	@Param		limit		query		int		false	"limit (default 20, max 100)"
+//	@Param		category	query		string	false	"filter by category"
 //	@Success	200	{object}	blogListEnvelope
 //	@Router		/api/v1/blog [get]
 func (h *BlogHandler) List(w http.ResponseWriter, r *http.Request) {
 	page, limit, offset := httputil.PageParams(r)
-	posts, total, err := h.blog.List(r.Context(), limit, offset)
+	category := r.URL.Query().Get("category")
+	status := r.URL.Query().Get("status")
+	// Non-admins can only browse published posts — drafts/pending-review
+	// submissions (including their own) aren't public yet.
+	if !h.isPrivileged(r) {
+		status = "published"
+	}
+	posts, total, err := h.blog.List(r.Context(), category, status, limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -145,6 +153,10 @@ func (h *BlogHandler) Get(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
+	if post.Status != "published" && !h.isPrivileged(r) {
+		httputil.Error(w, apperror.NotFound("blog post not found"))
+		return
+	}
 	httputil.OK(w, post)
 }
 
@@ -167,13 +179,19 @@ func (h *BlogHandler) Create(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	status := req.Status
+	if !h.isPrivileged(r) {
+		// Regular users can write posts, but they go to moderation first —
+		// ignore whatever status the client sent.
+		status = "review"
+	}
 	post := &model.BlogPost{
 		Title:    req.Title,
 		Category: req.Category,
 		Author:   h.authorName(r),
 		Excerpt:  req.Excerpt,
 		Body:     req.Body,
-		Status:   req.Status,
+		Status:   status,
 	}
 	if err := h.blog.Create(r.Context(), post); err != nil {
 		httputil.Error(w, err)
@@ -257,4 +275,15 @@ func (h *BlogHandler) authorName(r *http.Request) string {
 		return u.DisplayName
 	}
 	return "Ẩn danh"
+}
+
+// isPrivileged reports whether the request is from a logged-in admin/mod —
+// they can see and create posts outside the normal moderation flow.
+func (h *BlogHandler) isPrivileged(r *http.Request) bool {
+	id, ok := middleware.UserIDFromContext(r.Context())
+	if !ok {
+		return false
+	}
+	u, err := h.profiles.Get(r.Context(), id)
+	return err == nil && (u.Role == "admin" || u.Role == "mod")
 }

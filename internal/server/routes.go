@@ -42,6 +42,7 @@ func (s *Server) routes() http.Handler {
 	notificationService := service.NewNotificationService(notificationRepo)
 	adminUserService := service.NewAdminUserService(userRepo)
 	requireAuth := middleware.Auth(s.cfg.JWTSecret, adminUserService.IsActive)
+	optionalAuth := middleware.OptionalAuth(s.cfg.JWTSecret)
 	reportService := service.NewReportService(reportRepo)
 	settingService := service.NewSettingService(settingRepo)
 	aiClient := service.NewGeminiClient(s.cfg.GeminiAPIKey)
@@ -78,6 +79,7 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("POST /api/v1/auth/google", authHandler.GoogleLogin)
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.Me)))
+	mux.Handle("PUT /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.UpdateMe)))
 	mux.Handle("GET /api/v1/me/badges", requireAuth(http.HandlerFunc(badgeHandler.Me)))
 	mux.Handle("GET /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.GetPrefs)))
 	mux.Handle("PUT /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.SetPrefs)))
@@ -137,13 +139,16 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /api/v1/admin/exams/{id}/import", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Import))))
 	mux.Handle("GET /api/v1/admin/exams/{id}/questions", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Questions))))
 
-	mux.HandleFunc("GET /api/v1/blog", blogHandler.List)
-	mux.HandleFunc("GET /api/v1/blog/{id}", blogHandler.Get)
+	mux.Handle("GET /api/v1/blog", optionalAuth(http.HandlerFunc(blogHandler.List)))
+	mux.Handle("GET /api/v1/blog/{id}", optionalAuth(http.HandlerFunc(blogHandler.Get)))
 	mux.HandleFunc("GET /api/v1/blog/{id}/comments", blogHandler.ListComments)
 	mux.Handle("POST /api/v1/blog/{id}/comments", requireAuth(http.HandlerFunc(blogHandler.AddComment)))
 	mux.Handle("POST /api/v1/blog", requireAuth(http.HandlerFunc(blogHandler.Create)))
-	mux.Handle("PUT /api/v1/blog/{id}", requireAuth(http.HandlerFunc(blogHandler.Update)))
-	mux.Handle("DELETE /api/v1/blog/{id}", requireAuth(http.HandlerFunc(blogHandler.Delete)))
+	// Edit/delete are admin/mod-only — there's no per-post ownership tracking
+	// yet, so a regular author can't safely be allowed to edit their own
+	// pending post (and definitely shouldn't be able to edit/delete others').
+	mux.Handle("PUT /api/v1/blog/{id}", requireAuth(requireAdmin(http.HandlerFunc(blogHandler.Update))))
+	mux.Handle("DELETE /api/v1/blog/{id}", requireAuth(requireAdmin(http.HandlerFunc(blogHandler.Delete))))
 
 	mux.Handle("GET /swagger/", httpSwagger.WrapHandler)
 

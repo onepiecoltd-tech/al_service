@@ -27,6 +27,7 @@ type UserRepository interface {
 	ListAll(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	Insert(ctx context.Context, u *model.User) error
 	UpdateAdminFields(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
+	UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error)
 }
 
 type userRepository struct {
@@ -141,6 +142,14 @@ func (r *userRepository) UpdateAdminFields(ctx context.Context, id uuid.UUID, pl
 		WHERE id = $1
 		RETURNING ` + userColumns
 	return scanUser(r.db.QueryRow(ctx, query, id, plan, role, status))
+}
+
+func (r *userRepository) UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error) {
+	const query = `
+		UPDATE users SET display_name = $2
+		WHERE id = $1
+		RETURNING ` + userColumns
+	return scanUser(r.db.QueryRow(ctx, query, id, name))
 }
 
 func (r *userRepository) ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error) {

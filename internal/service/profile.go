@@ -2,9 +2,11 @@ package service
 
 import (
 	"context"
+	"strings"
 
 	"github.com/google/uuid"
 
+	"github.com/craftbyte/learning_languages/services/internal/apperror"
 	"github.com/craftbyte/learning_languages/services/internal/model"
 	"github.com/craftbyte/learning_languages/services/internal/repository"
 )
@@ -13,6 +15,7 @@ type ProfileService interface {
 	Get(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetPrefs(ctx context.Context, id uuid.UUID) (map[string]bool, error)
 	SetPrefs(ctx context.Context, id uuid.UUID, prefs map[string]bool) error
+	UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error)
 }
 
 type profileService struct {
@@ -33,4 +36,15 @@ func (s *profileService) GetPrefs(ctx context.Context, id uuid.UUID) (map[string
 
 func (s *profileService) SetPrefs(ctx context.Context, id uuid.UUID, prefs map[string]bool) error {
 	return s.users.SetPrefs(ctx, id, prefs)
+}
+
+func (s *profileService) UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error) {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return nil, apperror.BadRequest("tên hiển thị không được để trống")
+	}
+	if len(name) > 60 {
+		return nil, apperror.BadRequest("tên hiển thị quá dài (tối đa 60 ký tự)")
+	}
+	return s.users.UpdateDisplayName(ctx, id, name)
 }
