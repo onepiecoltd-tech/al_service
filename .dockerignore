@@ -1,4 +1,5 @@
 bin/
 .env
+# NOTE: docs/ is NOT ignored — it holds the generated swagger docs package
+# that routes.go imports, so the build needs it.
 *.md
-docs/
