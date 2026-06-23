@@ -54,6 +54,7 @@ func (s *Server) routes() http.Handler {
 	walletService := service.NewWalletService(walletRepo, giftRepo)
 	badgeService := service.NewBadgeService(badgeRepo)
 	directMessageService := service.NewDirectMessageService(directMessageRepo, userRepo)
+	studyGroupService := service.NewStudyGroupService(repository.NewStudyGroupRepository(s.db))
 
 	authHandler := handler.NewAuthHandler(authService, settingService)
 	profileHandler := handler.NewProfileHandler(profileService)
@@ -70,6 +71,7 @@ func (s *Server) routes() http.Handler {
 	examHandler := handler.NewExamHandler(examService, profileService)
 	speakingHandler := handler.NewSpeakingHandler(speakingService)
 	directMessageHandler := handler.NewDirectMessageHandler(directMessageService, s.cfg.JWTSecret, adminUserService.IsActive)
+	studyGroupHandler := handler.NewStudyGroupHandler(studyGroupService)
 	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
 	walletHandler := handler.NewWalletHandler(walletService)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
@@ -107,6 +109,15 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/messages/{id}", requireAuth(http.HandlerFunc(directMessageHandler.History)))
 	mux.Handle("POST /api/v1/messages/{id}", requireAuth(http.HandlerFunc(directMessageHandler.Send)))
 	mux.Handle("POST /api/v1/messages/{id}/read", requireAuth(http.HandlerFunc(directMessageHandler.MarkRead)))
+
+	mux.Handle("GET /api/v1/groups", requireAuth(http.HandlerFunc(studyGroupHandler.List)))
+	mux.Handle("POST /api/v1/groups", requireAuth(http.HandlerFunc(studyGroupHandler.Create)))
+	mux.Handle("POST /api/v1/groups/join", requireAuth(http.HandlerFunc(studyGroupHandler.Join)))
+	mux.Handle("GET /api/v1/groups/{id}/members", requireAuth(http.HandlerFunc(studyGroupHandler.Members)))
+	mux.Handle("GET /api/v1/groups/{id}/requests", requireAuth(http.HandlerFunc(studyGroupHandler.PendingRequests)))
+	mux.Handle("POST /api/v1/groups/{id}/requests/{userId}/approve", requireAuth(http.HandlerFunc(studyGroupHandler.Approve)))
+	mux.Handle("POST /api/v1/groups/{id}/requests/{userId}/reject", requireAuth(http.HandlerFunc(studyGroupHandler.Reject)))
+	mux.Handle("DELETE /api/v1/groups/{id}/leave", requireAuth(http.HandlerFunc(studyGroupHandler.Leave)))
 
 	mux.Handle("GET /api/v1/wallet/transactions", requireAuth(http.HandlerFunc(walletHandler.Transactions)))
 	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
