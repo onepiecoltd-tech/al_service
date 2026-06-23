@@ -1,35 +1,17 @@
+# Go API only. Run after the DB is up:
+#   docker compose -f docker-compose.app.yml up -d --build
 services:
-  postgres:
-    image: postgres:16-alpine
-    environment:
-      POSTGRES_USER: admin
-      POSTGRES_PASSWORD: secretpassword137
-      POSTGRES_DB: learning_languages
-    ports:
-      - "5432:5432"
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U admin -d learning_languages"]
-      interval: 5s
-      timeout: 5s
-      retries: 5
-
   api:
     build: .
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      # Talk to the postgres service over the compose network (not the host).
-      DATABASE_URL: postgres://admin:secretpassword137@postgres:5432/learning_languages?sslmode=disable
-      PORT: "8080"
-      ENV: ${ENV:-development}
-      # Secrets are interpolated from the local .env (compose reads it
-      # automatically) — they are NOT baked into the image.
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
-      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    # All config (DATABASE_URL, JWT_SECRET, GEMINI_API_KEY, GOOGLE_CLIENT_ID,
+    # PORT, ENV) is read from .env and passed into the container as-is.
+    env_file:
+      - .env
+    # No shared compose network: the DB is reached over the host. Map the
+    # host gateway so DATABASE_URL can point at it, e.g.
+    #   DATABASE_URL=postgres://admin:secretpassword137@host.docker.internal:5432/learning_languages?sslmode=disable
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8080:8080"
     healthcheck:
@@ -37,6 +19,3 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-
-volumes:
-  postgres_data:
