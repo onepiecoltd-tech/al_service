@@ -83,6 +83,7 @@ func (s *Server) routes() http.Handler {
 
 	mux.Handle("GET /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.Me)))
 	mux.Handle("PUT /api/v1/me", requireAuth(http.HandlerFunc(profileHandler.UpdateMe)))
+	mux.Handle("POST /api/v1/me/heartbeat", requireAuth(http.HandlerFunc(profileHandler.Heartbeat)))
 	mux.Handle("GET /api/v1/me/badges", requireAuth(http.HandlerFunc(badgeHandler.Me)))
 	mux.Handle("GET /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.GetPrefs)))
 	mux.Handle("PUT /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.SetPrefs)))

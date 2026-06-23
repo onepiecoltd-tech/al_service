@@ -20,6 +20,8 @@ type UserRepository interface {
 	TopByElo(ctx context.Context, limit int) ([]model.User, error)
 	ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error)
 	AreFriends(ctx context.Context, userA, userB uuid.UUID) (bool, error)
+	// Touch records that the user was just seen (heartbeat), for presence.
+	Touch(ctx context.Context, userID uuid.UUID) error
 	ListIncomingRequests(ctx context.Context, userID uuid.UUID) ([]model.User, error)
 	SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.UserSearchResult, error)
 	AddFriend(ctx context.Context, userID, friendID uuid.UUID) error
@@ -155,12 +157,34 @@ func (r *userRepository) UpdateDisplayName(ctx context.Context, id uuid.UUID, na
 	return scanUser(r.db.QueryRow(ctx, query, id, name))
 }
 
+// presenceExpr derives live online/offline status from last_seen_at instead
+// of the static presence column: a user is "online" only if they sent a
+// heartbeat within the window AND haven't hidden their status via the
+// show_online privacy pref. The window is wider than the client heartbeat
+// interval so one missed beat doesn't flip them offline.
+const presenceExpr = `CASE
+	WHEN (prefs->>'show_online') IS DISTINCT FROM 'false'
+	     AND last_seen_at IS NOT NULL
+	     AND last_seen_at > now() - interval '75 seconds'
+	THEN 'online' ELSE 'offline' END`
+
+// friendColumns is userColumns with the static presence column swapped for
+// the computed presenceExpr — same order, so scanUserInto still applies.
+const friendColumns = `id, email, display_name, password_hash, handle, plan, coins, elo, streak, wins, ` + presenceExpr + ` AS presence, status_msg, role, status, created_at`
+
+func (r *userRepository) Touch(ctx context.Context, userID uuid.UUID) error {
+	if _, err := r.db.Exec(ctx, `UPDATE users SET last_seen_at = now() WHERE id = $1`, userID); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
 func (r *userRepository) ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error) {
 	const query = `
-		SELECT ` + userColumns + `
+		SELECT ` + friendColumns + `
 		FROM users
 		WHERE id IN (SELECT friend_id FROM friendships WHERE user_id = $1 AND status = 'accepted')
-		ORDER BY (presence = 'offline'), display_name`
+		ORDER BY (` + presenceExpr + ` = 'offline'), display_name`
 
 	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {

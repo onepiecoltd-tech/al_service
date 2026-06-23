@@ -162,6 +162,25 @@ func (h *ProfileHandler) SetPrefs(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, prefs)
 }
 
+// Heartbeat godoc
+//
+//	@Summary	Mark the authenticated user as currently online (presence ping)
+//	@Tags		profile
+//	@Security	BearerAuth
+//	@Success	204	"ok"
+//	@Router		/api/v1/me/heartbeat [post]
+func (h *ProfileHandler) Heartbeat(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	if err := h.profiles.Heartbeat(r.Context(), id); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func rankFromElo(elo int) string {
 	switch {
 	case elo >= 1500:

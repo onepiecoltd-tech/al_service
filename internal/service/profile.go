@@ -16,6 +16,8 @@ type ProfileService interface {
 	GetPrefs(ctx context.Context, id uuid.UUID) (map[string]bool, error)
 	SetPrefs(ctx context.Context, id uuid.UUID, prefs map[string]bool) error
 	UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error)
+	// Heartbeat marks the user as currently active, for online presence.
+	Heartbeat(ctx context.Context, id uuid.UUID) error
 }
 
 type profileService struct {
@@ -47,4 +49,8 @@ func (s *profileService) UpdateDisplayName(ctx context.Context, id uuid.UUID, na
 		return nil, apperror.BadRequest("tên hiển thị quá dài (tối đa 60 ký tự)")
 	}
 	return s.users.UpdateDisplayName(ctx, id, name)
+}
+
+func (s *profileService) Heartbeat(ctx context.Context, id uuid.UUID) error {
+	return s.users.Touch(ctx, id)
 }
