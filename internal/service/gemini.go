@@ -162,6 +162,88 @@ func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, da
 	return qs, nil
 }
 
+// ChatTurn is one message in a Giải đề AI conversation.
+type ChatTurn struct {
+	Role string // "user" or "model"
+	Text string
+}
+
+// Ask answers a free-text question about an exam's questions, given the prior
+// conversation turns. Plain-text reply, no PDF/schema involved.
+func (c *GeminiClient) Ask(ctx context.Context, examContext string, history []ChatTurn, question string) (string, error) {
+	if c.apiKey == "" {
+		return "", apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
+	}
+
+	contents := make([]map[string]any, 0, len(history)+1)
+	for _, t := range history {
+		contents = append(contents, map[string]any{
+			"role":  t.Role,
+			"parts": []map[string]any{{"text": t.Text}},
+		})
+	}
+	contents = append(contents, map[string]any{
+		"role":  "user",
+		"parts": []map[string]any{{"text": question}},
+	})
+
+	reqBody := map[string]any{
+		"system_instruction": map[string]any{
+			"parts": []map[string]any{{"text": "Bạn là trợ lý giải đề thi cho học viên. Dưới đây là các câu hỏi (và đáp án mẫu nếu có) của đề thi đang được hỏi:\n\n" + examContext + "\n\nHãy trả lời ngắn gọn, rõ ràng, bằng tiếng Việt, tập trung vào câu hỏi của học viên."}},
+		},
+		"contents": contents,
+	}
+	buf, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+
+	url := fmt.Sprintf(geminiAPIURLTemplate, c.model)
+	if geminiAPIURLOverride != "" {
+		url = geminiAPIURLOverride
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
+	}
+
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
+	}
+	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
+		return "", apperror.Internal(fmt.Errorf("Gemini không trả lời"))
+	}
+	answer := strings.TrimSpace(parsed.Candidates[0].Content.Parts[0].Text)
+	if answer == "" {
+		return "", apperror.Internal(fmt.Errorf("Gemini trả về câu trả lời trống"))
+	}
+	return answer, nil
+}
+
 func fileExt(name string) string {
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
 		return name[i:]

@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"encoding/json"
 	"io"
 	"net/http"
 	"time"
@@ -77,6 +78,80 @@ func (h *ExamHandler) Get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.OK(w, map[string]any{"exam": exam, "questions": qs})
+}
+
+type askRequest struct {
+	Question string `json:"question"`
+}
+
+// Ask godoc
+//
+//	@Summary	Ask the AI tutor a question about one of the current user's exams
+//	@Description	Persists both the question and the answer to the exam's chat history.
+//	@Tags		exams
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id		path		string		true	"Exam ID"
+//	@Param		body	body		askRequest	true	"Question"
+//	@Success	200		{object}	map[string]interface{}
+//	@Failure	400		{object}	errorEnvelope
+//	@Failure	404		{object}	errorEnvelope
+//	@Router		/api/v1/exams/{id}/ask [post]
+func (h *ExamHandler) Ask(w http.ResponseWriter, r *http.Request) {
+	uid, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid exam id"))
+		return
+	}
+	// Gemini calls can take tens of seconds; extend past the server's default
+	// 30s WriteTimeout for this handler only.
+	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(2 * time.Minute))
+
+	var req askRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid request body"))
+		return
+	}
+
+	answer, err := h.exams.Ask(r.Context(), id, uid, req.Question)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]any{"answer": answer})
+}
+
+// ChatHistory godoc
+//
+//	@Summary	Get the persisted Giải đề AI conversation for one of the current user's exams
+//	@Tags		exams
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path		string	true	"Exam ID"
+//	@Success	200	{object}	map[string]interface{}
+//	@Failure	404	{object}	errorEnvelope
+//	@Router		/api/v1/exams/{id}/chat [get]
+func (h *ExamHandler) ChatHistory(w http.ResponseWriter, r *http.Request) {
+	uid, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid exam id"))
+		return
+	}
+	msgs, err := h.exams.ChatHistory(r.Context(), id, uid)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]any{"messages": msgs})
 }
 
 // Upload godoc

@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"github.com/google/uuid"
@@ -28,16 +29,23 @@ type ExamService interface {
 	// GetOwned returns the exam only if it belongs to ownerID, else NotFound
 	// (never leaks existence of another user's exam).
 	GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error)
+	// Ask answers a free-text question about the owner's exam, using its
+	// extracted questions plus the persisted conversation as context, then
+	// appends both the question and the answer to that history.
+	Ask(ctx context.Context, examID, ownerID uuid.UUID, question string) (string, error)
+	// ChatHistory returns the persisted Giải đề AI conversation for the exam.
+	ChatHistory(ctx context.Context, examID, ownerID uuid.UUID) ([]model.ChatMessage, error)
 }
 
 type examService struct {
 	repo      repository.ExamRepository
 	questions repository.QuestionRepository
+	chat      repository.ChatMessageRepository
 	ai        *GeminiClient
 }
 
-func NewExamService(repo repository.ExamRepository, questions repository.QuestionRepository, ai *GeminiClient) ExamService {
-	return &examService{repo: repo, questions: questions, ai: ai}
+func NewExamService(repo repository.ExamRepository, questions repository.QuestionRepository, chat repository.ChatMessageRepository, ai *GeminiClient) ExamService {
+	return &examService{repo: repo, questions: questions, chat: chat, ai: ai}
 }
 
 func (s *examService) Import(ctx context.Context, examID uuid.UUID, filename string, data []byte) ([]model.Question, error) {
@@ -105,6 +113,61 @@ func (s *examService) GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (
 		return nil, apperror.NotFound("exam not found")
 	}
 	return exam, nil
+}
+
+const maxAskContextQuestions = 60
+
+func (s *examService) ChatHistory(ctx context.Context, examID, ownerID uuid.UUID) ([]model.ChatMessage, error) {
+	if _, err := s.GetOwned(ctx, examID, ownerID); err != nil {
+		return nil, err
+	}
+	return s.chat.ListByExam(ctx, examID)
+}
+
+func (s *examService) Ask(ctx context.Context, examID, ownerID uuid.UUID, question string) (string, error) {
+	question = strings.TrimSpace(question)
+	if question == "" {
+		return "", apperror.BadRequest("thiếu câu hỏi")
+	}
+	if _, err := s.GetOwned(ctx, examID, ownerID); err != nil {
+		return "", err
+	}
+	qs, err := s.questions.ListByExam(ctx, examID)
+	if err != nil {
+		return "", err
+	}
+	prior, err := s.chat.ListByExam(ctx, examID)
+	if err != nil {
+		return "", err
+	}
+
+	var b strings.Builder
+	for i, q := range qs {
+		if i >= maxAskContextQuestions {
+			break
+		}
+		fmt.Fprintf(&b, "%d. %s\n", q.Position, q.Prompt)
+		if q.SampleAnswer != "" {
+			fmt.Fprintf(&b, "   Đáp án mẫu: %s\n", q.SampleAnswer)
+		}
+	}
+
+	history := make([]ChatTurn, len(prior))
+	for i, m := range prior {
+		history[i] = ChatTurn{Role: m.Role, Text: m.Text}
+	}
+
+	answer, err := s.ai.Ask(ctx, b.String(), history, question)
+	if err != nil {
+		return "", err
+	}
+	if err := s.chat.Insert(ctx, examID, "user", question); err != nil {
+		return "", err
+	}
+	if err := s.chat.Insert(ctx, examID, "model", answer); err != nil {
+		return "", err
+	}
+	return answer, nil
 }
 
 func (s *examService) List(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
