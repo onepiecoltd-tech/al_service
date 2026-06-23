@@ -1,9 +1,11 @@
 package middleware
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"log/slog"
+	"net"
 	"net/http"
 	"strings"
 	"time"
@@ -22,11 +24,10 @@ const (
 	userIDKey    contextKey = "user_id"
 )
 
-// parseToken validates the request's Bearer JWT and returns the user ID from
-// the "sub" claim. ok is false when there is no valid token.
-func parseToken(key []byte, r *http.Request) (uuid.UUID, bool) {
-	raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
-	if !ok {
+// parseRawToken validates a raw JWT string and returns the user ID from the
+// "sub" claim. ok is false when the token is missing/invalid.
+func parseRawToken(key []byte, raw string) (uuid.UUID, bool) {
+	if raw == "" {
 		return uuid.Nil, false
 	}
 	token, err := jwt.Parse(raw, func(t *jwt.Token) (any, error) {
@@ -47,6 +48,30 @@ func parseToken(key []byte, r *http.Request) (uuid.UUID, bool) {
 		return uuid.Nil, false
 	}
 	return id, true
+}
+
+// parseToken validates the request's Bearer JWT and returns the user ID from
+// the "sub" claim. ok is false when there is no valid token.
+func parseToken(key []byte, r *http.Request) (uuid.UUID, bool) {
+	raw, ok := strings.CutPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if !ok {
+		return uuid.Nil, false
+	}
+	return parseRawToken(key, raw)
+}
+
+// AuthenticateWS validates a JWT for the WebSocket upgrade request and
+// returns the user ID. The browser's native WebSocket client can't set
+// custom headers, so unlike Auth, this also accepts the token via a
+// "?token=" query param — used only for the messages/stream WS endpoint,
+// which the Nitro BFF calls server-to-server (the query string never
+// reaches the actual browser, which talks to Nitro's own WS route).
+func AuthenticateWS(secret string, r *http.Request) (uuid.UUID, bool) {
+	key := []byte(secret)
+	if id, ok := parseToken(key, r); ok {
+		return id, true
+	}
+	return parseRawToken(key, r.URL.Query().Get("token"))
 }
 
 // Auth validates a Bearer JWT signed with secret, puts the user ID (from the
@@ -219,4 +244,16 @@ type responseWriter struct {
 func (rw *responseWriter) WriteHeader(status int) {
 	rw.status = status
 	rw.ResponseWriter.WriteHeader(status)
+}
+
+// Hijack forwards to the underlying writer so WebSocket upgrades still work
+// through this wrapper — embedding the http.ResponseWriter interface alone
+// hides the concrete writer's Hijack method (the interface doesn't declare
+// it), which makes gorilla/websocket's Upgrade fail with a 500.
+func (rw *responseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
+	h, ok := rw.ResponseWriter.(http.Hijacker)
+	if !ok {
+		return nil, nil, fmt.Errorf("underlying ResponseWriter does not support hijacking")
+	}
+	return h.Hijack()
 }

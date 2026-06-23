@@ -19,6 +19,7 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	TopByElo(ctx context.Context, limit int) ([]model.User, error)
 	ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error)
+	AreFriends(ctx context.Context, userA, userB uuid.UUID) (bool, error)
 	ListIncomingRequests(ctx context.Context, userID uuid.UUID) ([]model.User, error)
 	SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.UserSearchResult, error)
 	AddFriend(ctx context.Context, userID, friendID uuid.UUID) error
@@ -179,6 +180,17 @@ func (r *userRepository) ListFriends(ctx context.Context, userID uuid.UUID) ([]m
 		return nil, apperror.Internal(err)
 	}
 	return friends, nil
+}
+
+func (r *userRepository) AreFriends(ctx context.Context, userA, userB uuid.UUID) (bool, error) {
+	var ok bool
+	err := r.db.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2 AND status = 'accepted')`,
+		userA, userB).Scan(&ok)
+	if err != nil {
+		return false, apperror.Internal(err)
+	}
+	return ok, nil
 }
 
 // SearchNonFriends excludes accepted friends and anyone who's sent userID a

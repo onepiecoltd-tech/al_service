@@ -32,6 +32,7 @@ func (s *Server) routes() http.Handler {
 	walletRepo := repository.NewWalletRepository(s.db)
 	badgeRepo := repository.NewBadgeRepository(s.db)
 	pronunciationWordRepo := repository.NewPronunciationWordRepository(s.db)
+	directMessageRepo := repository.NewDirectMessageRepository(s.db)
 
 	authService := service.NewAuthService(userRepo, s.cfg.JWTSecret, s.cfg.GoogleClientID)
 	profileService := service.NewProfileService(userRepo)
@@ -52,6 +53,7 @@ func (s *Server) routes() http.Handler {
 	overviewService := service.NewOverviewService(overviewRepo)
 	walletService := service.NewWalletService(walletRepo, giftRepo)
 	badgeService := service.NewBadgeService(badgeRepo)
+	directMessageService := service.NewDirectMessageService(directMessageRepo, userRepo)
 
 	authHandler := handler.NewAuthHandler(authService, settingService)
 	profileHandler := handler.NewProfileHandler(profileService)
@@ -67,6 +69,7 @@ func (s *Server) routes() http.Handler {
 	adminExamHandler := handler.NewAdminExamHandler(examService, profileService)
 	examHandler := handler.NewExamHandler(examService, profileService)
 	speakingHandler := handler.NewSpeakingHandler(speakingService)
+	directMessageHandler := handler.NewDirectMessageHandler(directMessageService, s.cfg.JWTSecret, adminUserService.IsActive)
 	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
 	walletHandler := handler.NewWalletHandler(walletService)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
@@ -94,6 +97,13 @@ func (s *Server) routes() http.Handler {
 	mux.HandleFunc("GET /api/v1/status", statusHandler.Status)
 	mux.HandleFunc("GET /api/v1/gifts", giftHandler.List)
 	mux.HandleFunc("GET /api/v1/coin-packs", walletHandler.CoinPacks)
+
+	// Not wrapped in requireAuth: the WS upgrade handler authenticates itself
+	// via middleware.AuthenticateWS, which also accepts a "?token=" query
+	// param for the Nitro BFF's server-to-server connection.
+	mux.HandleFunc("GET /api/v1/messages/stream", directMessageHandler.Stream)
+	mux.Handle("GET /api/v1/messages/{id}", requireAuth(http.HandlerFunc(directMessageHandler.History)))
+	mux.Handle("POST /api/v1/messages/{id}", requireAuth(http.HandlerFunc(directMessageHandler.Send)))
 
 	mux.Handle("GET /api/v1/wallet/transactions", requireAuth(http.HandlerFunc(walletHandler.Transactions)))
 	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
