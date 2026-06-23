@@ -2,8 +2,10 @@ package repository
 
 import (
 	"context"
+	"errors"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/craftbyte/learning_languages/services/internal/apperror"
@@ -15,6 +17,9 @@ type QuestionRepository interface {
 	// set in one transaction, so re-importing is idempotent.
 	ReplaceForExam(ctx context.Context, examID uuid.UUID, qs []model.Question) error
 	ListByExam(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
+	// RandomFromBank returns one random question from the published admin
+	// question bank (owner_id IS NULL exams), for use as a speaking prompt.
+	RandomFromBank(ctx context.Context) (*model.Question, error)
 }
 
 type questionRepository struct {
@@ -46,6 +51,23 @@ func (r *questionRepository) ReplaceForExam(ctx context.Context, examID uuid.UUI
 		return apperror.Internal(err)
 	}
 	return nil
+}
+
+func (r *questionRepository) RandomFromBank(ctx context.Context) (*model.Question, error) {
+	var q model.Question
+	err := r.db.QueryRow(ctx,
+		`SELECT q.id, q.exam_id, q.position, q.prompt, q.sample_answer, q.created_at
+		 FROM questions q JOIN exams e ON e.id = q.exam_id
+		 WHERE e.owner_id IS NULL AND e.state = 'published'
+		 ORDER BY random() LIMIT 1`).
+		Scan(&q.ID, &q.ExamID, &q.Position, &q.Prompt, &q.SampleAnswer, &q.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, apperror.NotFound("ngân hàng chưa có câu hỏi nào")
+		}
+		return nil, apperror.Internal(err)
+	}
+	return &q, nil
 }
 
 func (r *questionRepository) ListByExam(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {

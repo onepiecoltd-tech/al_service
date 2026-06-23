@@ -67,6 +67,24 @@ func (h *ExamHandler) Bank(w http.ResponseWriter, r *http.Request) {
 	httputil.Paginated(w, exams, page, limit, total)
 }
 
+// RandomBankQuestion godoc
+//
+//	@Summary	Get one random question from the published bank, for a random speaking/practice prompt
+//	@Tags		exams
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Success	200	{object}	map[string]interface{}
+//	@Failure	404	{object}	errorEnvelope
+//	@Router		/api/v1/exam-bank/random-question [get]
+func (h *ExamHandler) RandomBankQuestion(w http.ResponseWriter, r *http.Request) {
+	q, err := h.exams.RandomBankQuestion(r.Context())
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, q)
+}
+
 // BankGet godoc
 //
 //	@Summary	Get one published bank exam, with its questions

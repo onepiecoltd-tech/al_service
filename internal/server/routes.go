@@ -31,6 +31,7 @@ func (s *Server) routes() http.Handler {
 	overviewRepo := repository.NewOverviewRepository(s.db)
 	walletRepo := repository.NewWalletRepository(s.db)
 	badgeRepo := repository.NewBadgeRepository(s.db)
+	pronunciationWordRepo := repository.NewPronunciationWordRepository(s.db)
 
 	authService := service.NewAuthService(userRepo, s.cfg.JWTSecret, s.cfg.GoogleClientID)
 	profileService := service.NewProfileService(userRepo)
@@ -45,6 +46,7 @@ func (s *Server) routes() http.Handler {
 	settingService := service.NewSettingService(settingRepo)
 	aiClient := service.NewGeminiClient(s.cfg.GeminiAPIKey)
 	examService := service.NewExamService(examRepo, questionRepo, chatMessageRepo, aiClient)
+	speakingService := service.NewSpeakingService(aiClient, pronunciationWordRepo)
 	commentService := service.NewCommentService(commentRepo)
 	overviewService := service.NewOverviewService(overviewRepo)
 	walletService := service.NewWalletService(walletRepo, giftRepo)
@@ -63,6 +65,7 @@ func (s *Server) routes() http.Handler {
 	statusHandler := handler.NewStatusHandler(settingService)
 	adminExamHandler := handler.NewAdminExamHandler(examService, profileService)
 	examHandler := handler.NewExamHandler(examService, profileService)
+	speakingHandler := handler.NewSpeakingHandler(speakingService)
 	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
 	walletHandler := handler.NewWalletHandler(walletService)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
@@ -97,7 +100,12 @@ func (s *Server) routes() http.Handler {
 	// Under a separate prefix (not /exams/{id}/...) so it can't collide with
 	// the /exams/{id}/ask wildcard route — Go's mux rejects ambiguous patterns.
 	mux.Handle("GET /api/v1/exam-bank", requireAuth(http.HandlerFunc(examHandler.Bank)))
+	mux.Handle("GET /api/v1/exam-bank/random-question", requireAuth(http.HandlerFunc(examHandler.RandomBankQuestion)))
 	mux.Handle("GET /api/v1/exam-bank/{id}", requireAuth(http.HandlerFunc(examHandler.BankGet)))
+
+	mux.Handle("POST /api/v1/speaking/grade", requireAuth(http.HandlerFunc(speakingHandler.Grade)))
+	mux.Handle("GET /api/v1/speaking/random-word", requireAuth(http.HandlerFunc(speakingHandler.RandomWord)))
+	mux.Handle("POST /api/v1/speaking/word", requireAuth(http.HandlerFunc(speakingHandler.PracticeWord)))
 	mux.Handle("GET /api/v1/exams/{id}", requireAuth(http.HandlerFunc(examHandler.Get)))
 	mux.Handle("GET /api/v1/exams/{id}/ask", requireAuth(http.HandlerFunc(examHandler.Ask)))
 	mux.Handle("GET /api/v1/exams/{id}/chat", requireAuth(http.HandlerFunc(examHandler.ChatHistory)))

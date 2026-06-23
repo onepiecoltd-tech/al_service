@@ -274,6 +274,170 @@ func (c *GeminiClient) AskStream(ctx context.Context, examContext string, histor
 	return answer, nil
 }
 
+var speakingSchema = map[string]any{
+	"type": "OBJECT",
+	"properties": map[string]any{
+		"band_overall":  map[string]any{"type": "NUMBER"},
+		"fluency":       map[string]any{"type": "NUMBER"},
+		"vocabulary":    map[string]any{"type": "NUMBER"},
+		"grammar":       map[string]any{"type": "NUMBER"},
+		"pronunciation": map[string]any{"type": "NUMBER"},
+		"feedback":      map[string]any{"type": "STRING"},
+	},
+	"required": []string{"band_overall", "fluency", "vocabulary", "grammar", "pronunciation", "feedback"},
+}
+
+// SpeakingResult is the AI's assessment of one spoken answer.
+type SpeakingResult struct {
+	BandOverall   float64 `json:"band_overall"`
+	Fluency       float64 `json:"fluency"`
+	Vocabulary    float64 `json:"vocabulary"`
+	Grammar       float64 `json:"grammar"`
+	Pronunciation float64 `json:"pronunciation"`
+	Feedback      string  `json:"feedback"`
+}
+
+// GradeSpeaking sends a recorded spoken answer to Gemini and returns an
+// IELTS-style band assessment. mimeType should match the audio encoding the
+// browser recorded with (e.g. "audio/webm").
+func (c *GeminiClient) GradeSpeaking(ctx context.Context, promptText, mimeType string, audio []byte) (*SpeakingResult, error) {
+	if c.apiKey == "" {
+		return nil, apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
+	}
+
+	parts := []map[string]any{
+		{
+			"text": "Bạn là giám khảo IELTS Speaking. Đây là câu hỏi/đề bài và bản ghi âm câu trả lời của học viên. Hãy chấm điểm theo 4 tiêu chí (thang 0-9, có thể lẻ 0.5) và viết nhận xét ngắn gọn bằng tiếng Việt (3-5 câu), chỉ ra điểm mạnh và điều cần cải thiện cụ thể.\n\nĐề bài: " + promptText,
+		},
+		{
+			"inline_data": map[string]any{
+				"mime_type": mimeType,
+				"data":      base64.StdEncoding.EncodeToString(audio),
+			},
+		},
+	}
+
+	reqBody := map[string]any{
+		"contents": []map[string]any{{"parts": parts}},
+		"generationConfig": map[string]any{
+			"responseMimeType": "application/json",
+			"responseSchema":   speakingSchema,
+		},
+	}
+	buf, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+
+	url := fmt.Sprintf(geminiAPIURLTemplate, c.model)
+	if geminiAPIURLOverride != "" {
+		url = geminiAPIURLOverride
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return nil, apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return nil, apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
+	}
+
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return nil, apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
+	}
+	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
+		return nil, apperror.Internal(fmt.Errorf("Gemini không trả về kết quả chấm điểm"))
+	}
+
+	var out SpeakingResult
+	if err := json.Unmarshal([]byte(parsed.Candidates[0].Content.Parts[0].Text), &out); err != nil {
+		return nil, apperror.Internal(fmt.Errorf("không đọc được điểm số từ Gemini: %w", err))
+	}
+	return &out, nil
+}
+
+// TranscribePhonetic asks Gemini for the IPA phonetic transcription of a
+// single English word, e.g. "/ˌɒn.trə.prəˈnɜːr/".
+func (c *GeminiClient) TranscribePhonetic(ctx context.Context, word string) (string, error) {
+	if c.apiKey == "" {
+		return "", apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
+	}
+
+	reqBody := map[string]any{
+		"contents": []map[string]any{
+			{"parts": []map[string]any{{"text": "Give the IPA phonetic transcription (General American or RP, your choice) of this English word, wrapped in slashes, e.g. /wɜːd/. Reply with ONLY the transcription, nothing else.\n\nWord: " + word}}},
+		},
+		"generationConfig": map[string]any{
+			"thinkingConfig": map[string]any{"thinkingBudget": 0},
+		},
+	}
+	buf, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+
+	url := fmt.Sprintf(geminiAPIURLTemplate, c.model)
+	if geminiAPIURLOverride != "" {
+		url = geminiAPIURLOverride
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
+	}
+
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
+	}
+	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
+		return "", apperror.Internal(fmt.Errorf("Gemini không trả về kết quả"))
+	}
+	return strings.TrimSpace(parsed.Candidates[0].Content.Parts[0].Text), nil
+}
+
 func fileExt(name string) string {
 	if i := strings.LastIndexByte(name, '.'); i >= 0 {
 		return name[i:]

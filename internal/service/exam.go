@@ -28,6 +28,9 @@ type ExamService interface {
 	ListBank(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
 	// GetBank returns a bank exam only if it's published and ownerless, else NotFound.
 	GetBank(ctx context.Context, examID uuid.UUID) (*model.Exam, error)
+	// RandomBankQuestion returns one random question from the published bank,
+	// for use as a random default speaking prompt.
+	RandomBankQuestion(ctx context.Context) (*model.Question, error)
 	// Upload creates a user-owned exam from an uploaded file and imports its questions.
 	Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error)
 	// GetOwned returns the exam only if it belongs to ownerID, else NotFound
@@ -82,6 +85,10 @@ func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, limit, of
 
 func (s *examService) ListBank(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
 	return s.repo.ListPublished(ctx, limit, offset)
+}
+
+func (s *examService) RandomBankQuestion(ctx context.Context) (*model.Question, error) {
+	return s.questions.RandomFromBank(ctx)
 }
 
 func (s *examService) GetBank(ctx context.Context, examID uuid.UUID) (*model.Exam, error) {
