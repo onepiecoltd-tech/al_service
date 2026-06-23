@@ -55,6 +55,7 @@ func (s *Server) routes() http.Handler {
 	badgeService := service.NewBadgeService(badgeRepo)
 	directMessageService := service.NewDirectMessageService(directMessageRepo, userRepo)
 	studyGroupService := service.NewStudyGroupService(repository.NewStudyGroupRepository(s.db))
+	duelService := service.NewDuelService(repository.NewDuelRepository(s.db), userRepo)
 
 	authHandler := handler.NewAuthHandler(authService, settingService)
 	profileHandler := handler.NewProfileHandler(profileService)
@@ -72,6 +73,7 @@ func (s *Server) routes() http.Handler {
 	speakingHandler := handler.NewSpeakingHandler(speakingService)
 	directMessageHandler := handler.NewDirectMessageHandler(directMessageService, s.cfg.JWTSecret, adminUserService.IsActive)
 	studyGroupHandler := handler.NewStudyGroupHandler(studyGroupService)
+	duelHandler := handler.NewDuelHandler(duelService)
 	adminOverviewHandler := handler.NewAdminOverviewHandler(overviewService)
 	walletHandler := handler.NewWalletHandler(walletService)
 	badgeHandler := handler.NewBadgeHandler(badgeService)
@@ -118,6 +120,11 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /api/v1/groups/{id}/requests/{userId}/approve", requireAuth(http.HandlerFunc(studyGroupHandler.Approve)))
 	mux.Handle("POST /api/v1/groups/{id}/requests/{userId}/reject", requireAuth(http.HandlerFunc(studyGroupHandler.Reject)))
 	mux.Handle("DELETE /api/v1/groups/{id}/leave", requireAuth(http.HandlerFunc(studyGroupHandler.Leave)))
+
+	mux.Handle("GET /api/v1/duels", requireAuth(http.HandlerFunc(duelHandler.List)))
+	mux.Handle("POST /api/v1/duels", requireAuth(http.HandlerFunc(duelHandler.Challenge)))
+	mux.Handle("POST /api/v1/duels/{id}/respond", requireAuth(http.HandlerFunc(duelHandler.Respond)))
+	mux.Handle("POST /api/v1/duels/{id}/decline", requireAuth(http.HandlerFunc(duelHandler.Decline)))
 
 	mux.Handle("GET /api/v1/wallet/transactions", requireAuth(http.HandlerFunc(walletHandler.Transactions)))
 	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
