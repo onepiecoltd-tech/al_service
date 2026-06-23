@@ -13,6 +13,10 @@ import (
 
 type ExamRepository interface {
 	List(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
+	// ListPublished returns the published bank exams (owner_id IS NULL), for
+	// normal users to pick from when practicing — unlike List, it excludes
+	// drafts/review-state exams still being prepared by admins.
+	ListPublished(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
 	ListByOwner(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error)
 	Get(ctx context.Context, id uuid.UUID) (*model.Exam, error)
 	Create(ctx context.Context, e *model.Exam) error
@@ -42,6 +46,32 @@ func (r *examRepository) List(ctx context.Context, limit, offset int) ([]model.E
 	}
 
 	rows, err := r.db.Query(ctx, `SELECT `+examColumns+` FROM exams WHERE owner_id IS NULL ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
+	if err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+	defer rows.Close()
+
+	exams := []model.Exam{}
+	for rows.Next() {
+		var e model.Exam
+		if err := scanExam(rows, &e); err != nil {
+			return nil, 0, apperror.Internal(err)
+		}
+		exams = append(exams, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+	return exams, total, nil
+}
+
+func (r *examRepository) ListPublished(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
+	var total int
+	if err := r.db.QueryRow(ctx, `SELECT count(*) FROM exams WHERE owner_id IS NULL AND state = 'published'`).Scan(&total); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+
+	rows, err := r.db.Query(ctx, `SELECT `+examColumns+` FROM exams WHERE owner_id IS NULL AND state = 'published' ORDER BY created_at DESC LIMIT $1 OFFSET $2`, limit, offset)
 	if err != nil {
 		return nil, 0, apperror.Internal(err)
 	}

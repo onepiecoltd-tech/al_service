@@ -49,6 +49,53 @@ func (h *ExamHandler) Mine(w http.ResponseWriter, r *http.Request) {
 	httputil.Paginated(w, exams, page, limit, total)
 }
 
+// Bank godoc
+//
+//	@Summary	List the published admin question bank, for any user to practice
+//	@Tags		exams
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Success	200	{object}	map[string]interface{}
+//	@Router		/api/v1/exam-bank [get]
+func (h *ExamHandler) Bank(w http.ResponseWriter, r *http.Request) {
+	page, limit, offset := httputil.PageParams(r)
+	exams, total, err := h.exams.ListBank(r.Context(), limit, offset)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.Paginated(w, exams, page, limit, total)
+}
+
+// BankGet godoc
+//
+//	@Summary	Get one published bank exam, with its questions
+//	@Tags		exams
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path		string	true	"Exam ID"
+//	@Success	200	{object}	map[string]interface{}
+//	@Failure	404	{object}	errorEnvelope
+//	@Router		/api/v1/exam-bank/{id} [get]
+func (h *ExamHandler) BankGet(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid exam id"))
+		return
+	}
+	exam, err := h.exams.GetBank(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	qs, err := h.exams.Questions(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]any{"exam": exam, "questions": qs})
+}
+
 // Get godoc
 //
 //	@Summary	Get one of the current user's uploaded exams, with its questions

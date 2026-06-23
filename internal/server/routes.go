@@ -94,6 +94,10 @@ func (s *Server) routes() http.Handler {
 
 	mux.Handle("GET /api/v1/exams/mine", requireAuth(http.HandlerFunc(examHandler.Mine)))
 	mux.Handle("POST /api/v1/exams/upload", requireAuth(http.HandlerFunc(examHandler.Upload)))
+	// Under a separate prefix (not /exams/{id}/...) so it can't collide with
+	// the /exams/{id}/ask wildcard route — Go's mux rejects ambiguous patterns.
+	mux.Handle("GET /api/v1/exam-bank", requireAuth(http.HandlerFunc(examHandler.Bank)))
+	mux.Handle("GET /api/v1/exam-bank/{id}", requireAuth(http.HandlerFunc(examHandler.BankGet)))
 	mux.Handle("GET /api/v1/exams/{id}", requireAuth(http.HandlerFunc(examHandler.Get)))
 	mux.Handle("GET /api/v1/exams/{id}/ask", requireAuth(http.HandlerFunc(examHandler.Ask)))
 	mux.Handle("GET /api/v1/exams/{id}/chat", requireAuth(http.HandlerFunc(examHandler.ChatHistory)))

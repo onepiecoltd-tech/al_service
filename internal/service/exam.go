@@ -24,6 +24,10 @@ type ExamService interface {
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
 	// ListMine returns only the exams owned by the given user.
 	ListMine(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error)
+	// ListBank returns the published admin question bank, for any user to practice.
+	ListBank(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
+	// GetBank returns a bank exam only if it's published and ownerless, else NotFound.
+	GetBank(ctx context.Context, examID uuid.UUID) (*model.Exam, error)
 	// Upload creates a user-owned exam from an uploaded file and imports its questions.
 	Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error)
 	// GetOwned returns the exam only if it belongs to ownerID, else NotFound
@@ -74,6 +78,21 @@ func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.
 
 func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error) {
 	return s.repo.ListByOwner(ctx, ownerID, limit, offset)
+}
+
+func (s *examService) ListBank(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
+	return s.repo.ListPublished(ctx, limit, offset)
+}
+
+func (s *examService) GetBank(ctx context.Context, examID uuid.UUID) (*model.Exam, error) {
+	exam, err := s.repo.Get(ctx, examID)
+	if err != nil {
+		return nil, err
+	}
+	if exam.OwnerID != nil || exam.State != "published" {
+		return nil, apperror.NotFound("exam not found")
+	}
+	return exam, nil
 }
 
 func (s *examService) Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error) {
