@@ -23,3 +23,11 @@ type User struct {
 	Status       string    `json:"status"` // active | banned
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// UserSearchResult is a User plus the caller's relationship to them, for the
+// "add friend" search — e.g. so the UI can show "request sent" instead of an
+// add button for someone already pending.
+type UserSearchResult struct {
+	User
+	FriendStatus string // "none" | "pending_sent"
+}

@@ -85,6 +85,8 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("PUT /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.SetPrefs)))
 	mux.Handle("GET /api/v1/leaderboard", requireAuth(http.HandlerFunc(leaderboardHandler.List)))
 	mux.Handle("GET /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.List)))
+	mux.Handle("GET /api/v1/friends/requests", requireAuth(http.HandlerFunc(friendHandler.Requests)))
+	mux.Handle("POST /api/v1/friends/requests/{id}/accept", requireAuth(http.HandlerFunc(friendHandler.Accept)))
 	mux.Handle("POST /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.Add)))
 	mux.Handle("DELETE /api/v1/friends/{id}", requireAuth(http.HandlerFunc(friendHandler.Remove)))
 	mux.Handle("GET /api/v1/users/search", requireAuth(http.HandlerFunc(friendHandler.Search)))

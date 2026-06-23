@@ -19,8 +19,10 @@ type UserRepository interface {
 	FindByID(ctx context.Context, id uuid.UUID) (*model.User, error)
 	TopByElo(ctx context.Context, limit int) ([]model.User, error)
 	ListFriends(ctx context.Context, userID uuid.UUID) ([]model.User, error)
-	SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.User, error)
+	ListIncomingRequests(ctx context.Context, userID uuid.UUID) ([]model.User, error)
+	SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.UserSearchResult, error)
 	AddFriend(ctx context.Context, userID, friendID uuid.UUID) error
+	AcceptFriend(ctx context.Context, userID, requesterID uuid.UUID) error
 	RemoveFriend(ctx context.Context, userID, friendID uuid.UUID) error
 	GetPrefs(ctx context.Context, userID uuid.UUID) (map[string]bool, error)
 	SetPrefs(ctx context.Context, userID uuid.UUID, prefs map[string]bool) error
@@ -156,7 +158,7 @@ func (r *userRepository) ListFriends(ctx context.Context, userID uuid.UUID) ([]m
 	const query = `
 		SELECT ` + userColumns + `
 		FROM users
-		WHERE id IN (SELECT friend_id FROM friendships WHERE user_id = $1)
+		WHERE id IN (SELECT friend_id FROM friendships WHERE user_id = $1 AND status = 'accepted')
 		ORDER BY (presence = 'offline'), display_name`
 
 	rows, err := r.db.Query(ctx, query, userID)
@@ -179,17 +181,132 @@ func (r *userRepository) ListFriends(ctx context.Context, userID uuid.UUID) ([]m
 	return friends, nil
 }
 
-func (r *userRepository) SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.User, error) {
+// SearchNonFriends excludes accepted friends and anyone who's sent userID a
+// pending request (they surface via List/ListIncomingRequests instead).
+// Someone userID has already sent a pending request to is still included,
+// flagged via FriendStatus = "pending_sent", so the UI can grey out the
+// "add friend" action instead of letting them send a duplicate request.
+func (r *userRepository) SearchNonFriends(ctx context.Context, userID uuid.UUID, q string, limit int) ([]model.UserSearchResult, error) {
 	const query = `
-		SELECT ` + userColumns + `
+		SELECT ` + userColumns + `,
+			CASE WHEN EXISTS(
+				SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = users.id AND status = 'pending'
+			) THEN 'pending_sent' ELSE 'none' END AS friend_status
 		FROM users
 		WHERE id <> $1
-		  AND id NOT IN (SELECT friend_id FROM friendships WHERE user_id = $1)
+		  AND id NOT IN (SELECT friend_id FROM friendships WHERE user_id = $1 AND status = 'accepted')
+		  AND id NOT IN (SELECT user_id FROM friendships WHERE friend_id = $1 AND status = 'pending')
 		  AND ($2 = '' OR display_name ILIKE '%' || $2 || '%' OR email ILIKE '%' || $2 || '%' OR handle ILIKE '%' || $2 || '%')
 		ORDER BY display_name
 		LIMIT $3`
 
 	rows, err := r.db.Query(ctx, query, userID, q, limit)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	defer rows.Close()
+
+	users := []model.UserSearchResult{}
+	for rows.Next() {
+		var u model.UserSearchResult
+		if err := rows.Scan(
+			&u.ID, &u.Email, &u.DisplayName, &u.PasswordHash,
+			&u.Handle, &u.Plan, &u.Coins, &u.Elo, &u.Streak, &u.Wins,
+			&u.Presence, &u.StatusMsg, &u.Role, &u.Status, &u.CreatedAt,
+			&u.FriendStatus,
+		); err != nil {
+			return nil, apperror.Internal(err)
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.Internal(err)
+	}
+	return users, nil
+}
+
+// AddFriend sends a friend request from userID to friendID. If friendID had
+// already sent userID a pending request, this instead accepts it outright
+// (both sides wanted to connect, so there's nothing left to confirm).
+func (r *userRepository) AddFriend(ctx context.Context, userID, friendID uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after commit
+
+	var reversePending bool
+	err = tx.QueryRow(ctx,
+		`SELECT EXISTS(SELECT 1 FROM friendships WHERE user_id = $1 AND friend_id = $2 AND status = 'pending')`,
+		friendID, userID).Scan(&reversePending)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+
+	if reversePending {
+		if _, err := tx.Exec(ctx,
+			`UPDATE friendships SET status = 'accepted' WHERE user_id = $1 AND friend_id = $2`,
+			friendID, userID); err != nil {
+			return apperror.Internal(err)
+		}
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'accepted')
+			 ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'accepted'`,
+			userID, friendID); err != nil {
+			return apperror.Internal(err)
+		}
+	} else {
+		if _, err := tx.Exec(ctx,
+			`INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'pending') ON CONFLICT DO NOTHING`,
+			userID, friendID); err != nil {
+			return apperror.Internal(err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+// AcceptFriend accepts a pending request that requesterID sent to userID.
+func (r *userRepository) AcceptFriend(ctx context.Context, userID, requesterID uuid.UUID) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	defer tx.Rollback(ctx) //nolint:errcheck // no-op after commit
+
+	tag, err := tx.Exec(ctx,
+		`UPDATE friendships SET status = 'accepted' WHERE user_id = $1 AND friend_id = $2 AND status = 'pending'`,
+		requesterID, userID)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperror.NotFound("không tìm thấy lời mời kết bạn")
+	}
+	if _, err := tx.Exec(ctx,
+		`INSERT INTO friendships (user_id, friend_id, status) VALUES ($1, $2, 'accepted')
+		 ON CONFLICT (user_id, friend_id) DO UPDATE SET status = 'accepted'`,
+		userID, requesterID); err != nil {
+		return apperror.Internal(err)
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+// ListIncomingRequests returns users who've sent userID a pending friend request.
+func (r *userRepository) ListIncomingRequests(ctx context.Context, userID uuid.UUID) ([]model.User, error) {
+	const query = `
+		SELECT ` + userColumns + `
+		FROM users
+		WHERE id IN (SELECT user_id FROM friendships WHERE friend_id = $1 AND status = 'pending')
+		ORDER BY display_name`
+	rows, err := r.db.Query(ctx, query, userID)
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}
@@ -207,16 +324,6 @@ func (r *userRepository) SearchNonFriends(ctx context.Context, userID uuid.UUID,
 		return nil, apperror.Internal(err)
 	}
 	return users, nil
-}
-
-func (r *userRepository) AddFriend(ctx context.Context, userID, friendID uuid.UUID) error {
-	_, err := r.db.Exec(ctx,
-		`INSERT INTO friendships (user_id, friend_id) VALUES ($1, $2), ($2, $1) ON CONFLICT DO NOTHING`,
-		userID, friendID)
-	if err != nil {
-		return apperror.Internal(err)
-	}
-	return nil
 }
 
 func (r *userRepository) RemoveFriend(ctx context.Context, userID, friendID uuid.UUID) error {

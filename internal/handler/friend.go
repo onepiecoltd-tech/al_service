@@ -68,11 +68,65 @@ func (h *FriendHandler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, rows)
 }
 
+// Requests godoc
+//
+//	@Summary	List pending friend requests sent to the authenticated user
+//	@Tags		friends
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Success	200	{object}	friendListEnvelope
+//	@Failure	401	{object}	errorEnvelope
+//	@Router		/api/v1/friends/requests [get]
+func (h *FriendHandler) Requests(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	users, err := h.friends.IncomingRequests(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	rows := make([]friendRow, len(users))
+	for i, u := range users {
+		rows[i] = friendRow{ID: u.ID.String(), Name: u.DisplayName, Handle: u.Handle, Elo: u.Elo, Presence: u.Presence, Msg: u.StatusMsg}
+	}
+	httputil.OK(w, rows)
+}
+
+// Accept godoc
+//
+//	@Summary	Accept a pending friend request
+//	@Tags		friends
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Requester user id"
+//	@Success	204	"accepted"
+//	@Failure	404	{object}	errorEnvelope
+//	@Router		/api/v1/friends/requests/{id}/accept [post]
+func (h *FriendHandler) Accept(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	requesterID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid user id"))
+		return
+	}
+	if err := h.friends.Accept(r.Context(), id, requesterID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type userMini struct {
-	ID     string `json:"id"`
-	Name   string `json:"name"`
-	Handle string `json:"handle"`
-	Elo    int    `json:"elo"`
+	ID           string `json:"id"`
+	Name         string `json:"name"`
+	Handle       string `json:"handle"`
+	Elo          int    `json:"elo"`
+	FriendStatus string `json:"friend_status"`
 }
 
 type addFriendRequest struct {
@@ -100,20 +154,20 @@ func (h *FriendHandler) Search(w http.ResponseWriter, r *http.Request) {
 	}
 	rows := make([]userMini, len(users))
 	for i, u := range users {
-		rows[i] = userMini{ID: u.ID.String(), Name: u.DisplayName, Handle: u.Handle, Elo: u.Elo}
+		rows[i] = userMini{ID: u.ID.String(), Name: u.DisplayName, Handle: u.Handle, Elo: u.Elo, FriendStatus: u.FriendStatus}
 	}
 	httputil.OK(w, rows)
 }
 
 // Add godoc
 //
-//	@Summary	Add a friend
+//	@Summary	Send a friend request (or auto-accept if they already requested you)
 //	@Tags		friends
 //	@Accept		json
 //	@Produce	json
 //	@Security	BearerAuth
 //	@Param		body	body		addFriendRequest	true	"Friend id"
-//	@Success	204		"added"
+//	@Success	204		"requested"
 //	@Failure	400		{object}	errorEnvelope
 //	@Failure	404		{object}	errorEnvelope
 //	@Router		/api/v1/friends [post]
