@@ -19,6 +19,10 @@ type DirectMessageService interface {
 	// allowed between accepted friends.
 	History(ctx context.Context, userID, otherID uuid.UUID) ([]model.DirectMessage, error)
 	Send(ctx context.Context, senderID, receiverID uuid.UUID, body string) (*model.DirectMessage, error)
+	// UnreadCount returns how many messages addressed to userID are unread.
+	UnreadCount(ctx context.Context, userID uuid.UUID) (int, error)
+	// MarkRead marks the conversation with otherID as read (friends only).
+	MarkRead(ctx context.Context, userID, otherID uuid.UUID) error
 	// Subscribe registers a channel that receives every message addressed to
 	// userID as it's sent, for the WebSocket stream endpoint. unsubscribe
 	// must be called (e.g. via defer) when the connection closes.
@@ -50,6 +54,14 @@ func (s *directMessageService) History(ctx context.Context, userID, otherID uuid
 		return nil, apperror.Forbidden("chỉ có thể xem hội thoại với bạn bè")
 	}
 	return s.messages.ListConversation(ctx, userID, otherID, directMessageHistoryLimit)
+}
+
+func (s *directMessageService) UnreadCount(ctx context.Context, userID uuid.UUID) (int, error) {
+	return s.messages.CountUnread(ctx, userID)
+}
+
+func (s *directMessageService) MarkRead(ctx context.Context, userID, otherID uuid.UUID) error {
+	return s.messages.MarkConversationRead(ctx, userID, otherID)
 }
 
 func (s *directMessageService) Send(ctx context.Context, senderID, receiverID uuid.UUID, body string) (*model.DirectMessage, error) {

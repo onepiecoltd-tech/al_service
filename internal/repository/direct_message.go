@@ -14,6 +14,10 @@ type DirectMessageRepository interface {
 	// ListConversation returns the messages between the two users, oldest first.
 	ListConversation(ctx context.Context, userA, userB uuid.UUID, limit int) ([]model.DirectMessage, error)
 	Insert(ctx context.Context, senderID, receiverID uuid.UUID, body string) (*model.DirectMessage, error)
+	// CountUnread returns how many messages addressed to userID are unread.
+	CountUnread(ctx context.Context, userID uuid.UUID) (int, error)
+	// MarkConversationRead marks every message from otherID to userID as read.
+	MarkConversationRead(ctx context.Context, userID, otherID uuid.UUID) error
 }
 
 type directMessageRepository struct {
@@ -52,6 +56,26 @@ func (r *directMessageRepository) ListConversation(ctx context.Context, userA, u
 		msgs[i], msgs[j] = msgs[j], msgs[i]
 	}
 	return msgs, nil
+}
+
+func (r *directMessageRepository) CountUnread(ctx context.Context, userID uuid.UUID) (int, error) {
+	var n int
+	if err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM direct_messages WHERE receiver_id = $1 AND read_at IS NULL`, userID).
+		Scan(&n); err != nil {
+		return 0, apperror.Internal(err)
+	}
+	return n, nil
+}
+
+func (r *directMessageRepository) MarkConversationRead(ctx context.Context, userID, otherID uuid.UUID) error {
+	if _, err := r.db.Exec(ctx,
+		`UPDATE direct_messages SET read_at = now()
+		 WHERE receiver_id = $1 AND sender_id = $2 AND read_at IS NULL`,
+		userID, otherID); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
 }
 
 func (r *directMessageRepository) Insert(ctx context.Context, senderID, receiverID uuid.UUID, body string) (*model.DirectMessage, error) {

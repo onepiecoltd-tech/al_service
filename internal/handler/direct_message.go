@@ -54,6 +54,53 @@ func (h *DirectMessageHandler) History(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, msgs)
 }
 
+// UnreadCount godoc
+//
+//	@Summary	Count the authenticated user's unread direct messages
+//	@Tags		messages
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Success	200	{object}	map[string]interface{}
+//	@Router		/api/v1/messages/unread-count [get]
+func (h *DirectMessageHandler) UnreadCount(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	n, err := h.messages.UnreadCount(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]int{"count": n})
+}
+
+// MarkRead godoc
+//
+//	@Summary	Mark a conversation as read
+//	@Tags		messages
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Friend user id"
+//	@Success	204	"ok"
+//	@Router		/api/v1/messages/{id}/read [post]
+func (h *DirectMessageHandler) MarkRead(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	otherID, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid user id"))
+		return
+	}
+	if err := h.messages.MarkRead(r.Context(), id, otherID); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type sendMessageRequest struct {
 	Body string `json:"body"`
 }

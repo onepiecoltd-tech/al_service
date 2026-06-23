@@ -103,8 +103,10 @@ func (s *Server) routes() http.Handler {
 	// via middleware.AuthenticateWS, which also accepts a "?token=" query
 	// param for the Nitro BFF's server-to-server connection.
 	mux.HandleFunc("GET /api/v1/messages/stream", directMessageHandler.Stream)
+	mux.Handle("GET /api/v1/messages/unread-count", requireAuth(http.HandlerFunc(directMessageHandler.UnreadCount)))
 	mux.Handle("GET /api/v1/messages/{id}", requireAuth(http.HandlerFunc(directMessageHandler.History)))
 	mux.Handle("POST /api/v1/messages/{id}", requireAuth(http.HandlerFunc(directMessageHandler.Send)))
+	mux.Handle("POST /api/v1/messages/{id}/read", requireAuth(http.HandlerFunc(directMessageHandler.MarkRead)))
 
 	mux.Handle("GET /api/v1/wallet/transactions", requireAuth(http.HandlerFunc(walletHandler.Transactions)))
 	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
