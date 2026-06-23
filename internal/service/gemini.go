@@ -1,6 +1,7 @@
 package service
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
@@ -16,9 +17,13 @@ import (
 )
 
 const geminiAPIURLTemplate = "https://generativelanguage.googleapis.com/v1beta/models/%s:generateContent"
+const geminiStreamAPIURLTemplate = "https://generativelanguage.googleapis.com/v1beta/models/%s:streamGenerateContent?alt=sse"
 
 // geminiAPIURLOverride lets tests point the client at a local httptest server.
 var geminiAPIURLOverride = ""
+
+// geminiStreamAPIURLOverride is the streaming-endpoint equivalent of geminiAPIURLOverride.
+var geminiStreamAPIURLOverride = ""
 
 // GeminiClient calls Gemini to extract exam questions from an uploaded file.
 type GeminiClient struct {
@@ -168,9 +173,10 @@ type ChatTurn struct {
 	Text string
 }
 
-// Ask answers a free-text question about an exam's questions, given the prior
-// conversation turns. Plain-text reply, no PDF/schema involved.
-func (c *GeminiClient) Ask(ctx context.Context, examContext string, history []ChatTurn, question string) (string, error) {
+// AskStream answers a free-text question about an exam's questions, given the
+// prior conversation turns, streaming each text fragment to onChunk as Gemini
+// produces it. Returns the full concatenated answer once the stream ends.
+func (c *GeminiClient) AskStream(ctx context.Context, examContext string, history []ChatTurn, question string, onChunk func(chunk string)) (string, error) {
 	if c.apiKey == "" {
 		return "", apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
 	}
@@ -192,15 +198,21 @@ func (c *GeminiClient) Ask(ctx context.Context, examContext string, history []Ch
 			"parts": []map[string]any{{"text": "Bạn là trợ lý giải đề thi cho học viên. Dưới đây là các câu hỏi (và đáp án mẫu nếu có) của đề thi đang được hỏi:\n\n" + examContext + "\n\nHãy trả lời ngắn gọn, rõ ràng, bằng tiếng Việt, tập trung vào câu hỏi của học viên."}},
 		},
 		"contents": contents,
+		// This is a quick tutoring Q&A, not a task needing deep reasoning —
+		// disabling the "thinking" phase removes a long silent gap before any
+		// output and makes the stream emit fragments sooner/more granularly.
+		"generationConfig": map[string]any{
+			"thinkingConfig": map[string]any{"thinkingBudget": 0},
+		},
 	}
 	buf, err := json.Marshal(reqBody)
 	if err != nil {
 		return "", apperror.Internal(err)
 	}
 
-	url := fmt.Sprintf(geminiAPIURLTemplate, c.model)
-	if geminiAPIURLOverride != "" {
-		url = geminiAPIURLOverride
+	url := fmt.Sprintf(geminiStreamAPIURLTemplate, c.model)
+	if geminiStreamAPIURLOverride != "" {
+		url = geminiStreamAPIURLOverride
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
 	if err != nil {
@@ -214,30 +226,48 @@ func (c *GeminiClient) Ask(ctx context.Context, examContext string, history []Ch
 		return "", apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
 	}
 	defer resp.Body.Close()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", apperror.Internal(err)
-	}
+
 	if resp.StatusCode != http.StatusOK {
+		respBody, _ := io.ReadAll(resp.Body)
 		return "", apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
 	}
 
-	var parsed struct {
-		Candidates []struct {
-			Content struct {
-				Parts []struct {
-					Text string `json:"text"`
-				} `json:"parts"`
-			} `json:"content"`
-		} `json:"candidates"`
+	var full strings.Builder
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		line := scanner.Text()
+		data, ok := strings.CutPrefix(line, "data: ")
+		if !ok {
+			continue
+		}
+		var chunk struct {
+			Candidates []struct {
+				Content struct {
+					Parts []struct {
+						Text string `json:"text"`
+					} `json:"parts"`
+				} `json:"content"`
+			} `json:"candidates"`
+		}
+		if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+			continue // skip malformed/keepalive lines rather than aborting the whole answer
+		}
+		for _, cand := range chunk.Candidates {
+			for _, p := range cand.Content.Parts {
+				if p.Text == "" {
+					continue
+				}
+				full.WriteString(p.Text)
+				onChunk(p.Text)
+			}
+		}
 	}
-	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return "", apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
+	if err := scanner.Err(); err != nil {
+		return "", apperror.Internal(fmt.Errorf("đọc luồng phản hồi từ Gemini thất bại: %w", err))
 	}
-	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
-		return "", apperror.Internal(fmt.Errorf("Gemini không trả lời"))
-	}
-	answer := strings.TrimSpace(parsed.Candidates[0].Content.Parts[0].Text)
+
+	answer := strings.TrimSpace(full.String())
 	if answer == "" {
 		return "", apperror.Internal(fmt.Errorf("Gemini trả về câu trả lời trống"))
 	}

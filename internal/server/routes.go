@@ -95,7 +95,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/exams/mine", requireAuth(http.HandlerFunc(examHandler.Mine)))
 	mux.Handle("POST /api/v1/exams/upload", requireAuth(http.HandlerFunc(examHandler.Upload)))
 	mux.Handle("GET /api/v1/exams/{id}", requireAuth(http.HandlerFunc(examHandler.Get)))
-	mux.Handle("POST /api/v1/exams/{id}/ask", requireAuth(http.HandlerFunc(examHandler.Ask)))
+	mux.Handle("GET /api/v1/exams/{id}/ask", requireAuth(http.HandlerFunc(examHandler.Ask)))
 	mux.Handle("GET /api/v1/exams/{id}/chat", requireAuth(http.HandlerFunc(examHandler.ChatHistory)))
 
 	mux.Handle("GET /api/v1/notifications", requireAuth(http.HandlerFunc(notificationHandler.List)))

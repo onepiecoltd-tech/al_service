@@ -41,3 +41,35 @@ func TestExtractQuestionsRejectsUnsupportedExt(t *testing.T) {
 		t.Fatal("want error for unsupported extension")
 	}
 }
+
+func TestAskStreamConcatenatesChunks(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("content-type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		for _, chunk := range []string{"Xin ", "chào", "!"} {
+			w.Write([]byte(`data: {"candidates":[{"content":{"parts":[{"text":"` + chunk + `"}]}}]}` + "\n\n"))
+			flusher.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	c := NewGeminiClient("test-key")
+	c.http = srv.Client()
+	orig := geminiStreamAPIURLOverride
+	geminiStreamAPIURLOverride = srv.URL
+	defer func() { geminiStreamAPIURLOverride = orig }()
+
+	var got []string
+	answer, err := c.AskStream(context.Background(), "context", nil, "hi?", func(chunk string) {
+		got = append(got, chunk)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if answer != "Xin chào!" {
+		t.Fatalf("got answer %q, want %q", answer, "Xin chào!")
+	}
+	if len(got) != 3 {
+		t.Fatalf("got %d chunks, want 3: %v", len(got), got)
+	}
+}

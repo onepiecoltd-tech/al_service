@@ -2,8 +2,10 @@ package handler
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -80,24 +82,18 @@ func (h *ExamHandler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, map[string]any{"exam": exam, "questions": qs})
 }
 
-type askRequest struct {
-	Question string `json:"question"`
-}
-
 // Ask godoc
 //
 //	@Summary	Ask the AI tutor a question about one of the current user's exams
-//	@Description	Persists both the question and the answer to the exam's chat history.
+//	@Description	Streams the answer as it's generated via Server-Sent Events (one "data:" JSON event per text fragment, ending with {"done":true}), and persists both the question and the full answer to the exam's chat history. GET + query param (not POST + body) because the client consumes this via the native EventSource API, which only issues GET requests.
 //	@Tags		exams
-//	@Accept		json
-//	@Produce	json
+//	@Produce	text/event-stream
 //	@Security	BearerAuth
-//	@Param		id		path		string		true	"Exam ID"
-//	@Param		body	body		askRequest	true	"Question"
-//	@Success	200		{object}	map[string]interface{}
-//	@Failure	400		{object}	errorEnvelope
-//	@Failure	404		{object}	errorEnvelope
-//	@Router		/api/v1/exams/{id}/ask [post]
+//	@Param		id			path	string	true	"Exam ID"
+//	@Param		question	query	string	true	"Question"
+//	@Failure	400			{object}	errorEnvelope
+//	@Failure	404			{object}	errorEnvelope
+//	@Router		/api/v1/exams/{id}/ask [get]
 func (h *ExamHandler) Ask(w http.ResponseWriter, r *http.Request) {
 	uid, ok := middleware.RequireUserID(w, r)
 	if !ok {
@@ -108,22 +104,43 @@ func (h *ExamHandler) Ask(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, apperror.BadRequest("invalid exam id"))
 		return
 	}
-	// Gemini calls can take tens of seconds; extend past the server's default
-	// 30s WriteTimeout for this handler only.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(2 * time.Minute))
-
-	var req askRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		httputil.Error(w, apperror.BadRequest("invalid request body"))
+	question := strings.TrimSpace(r.URL.Query().Get("question"))
+	if question == "" {
+		httputil.Error(w, apperror.BadRequest("thiếu câu hỏi"))
 		return
 	}
-
-	answer, err := h.exams.Ask(r.Context(), id, uid, req.Question)
-	if err != nil {
+	// Ownership is checked up front, before any SSE headers go out, so a
+	// rejected request still gets a normal JSON error response.
+	if _, err := h.exams.GetOwned(r.Context(), id, uid); err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, map[string]any{"answer": answer})
+
+	// Gemini calls can take tens of seconds; extend past the server's default
+	// 30s WriteTimeout for this handler only.
+	rc := http.NewResponseController(w)
+	_ = rc.SetWriteDeadline(time.Now().Add(2 * time.Minute))
+
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no") // disable nginx buffering, if any sits in front
+	w.WriteHeader(http.StatusOK)
+
+	writeEvent := func(payload map[string]any) {
+		buf, _ := json.Marshal(payload)
+		fmt.Fprintf(w, "data: %s\n\n", buf)
+		_ = rc.Flush()
+	}
+
+	err = h.exams.AskStream(r.Context(), id, uid, question, func(chunk string) {
+		writeEvent(map[string]any{"text": chunk})
+	})
+	if err != nil {
+		writeEvent(map[string]any{"error": err.Error()})
+		return
+	}
+	writeEvent(map[string]any{"done": true})
 }
 
 // ChatHistory godoc

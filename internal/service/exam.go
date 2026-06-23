@@ -29,10 +29,11 @@ type ExamService interface {
 	// GetOwned returns the exam only if it belongs to ownerID, else NotFound
 	// (never leaks existence of another user's exam).
 	GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error)
-	// Ask answers a free-text question about the owner's exam, using its
-	// extracted questions plus the persisted conversation as context, then
-	// appends both the question and the answer to that history.
-	Ask(ctx context.Context, examID, ownerID uuid.UUID, question string) (string, error)
+	// AskStream answers a free-text question about the owner's exam, using its
+	// extracted questions plus the persisted conversation as context, streaming
+	// each text fragment to onChunk as it arrives, then appends both the
+	// question and the full answer to that history.
+	AskStream(ctx context.Context, examID, ownerID uuid.UUID, question string, onChunk func(chunk string)) error
 	// ChatHistory returns the persisted Giải đề AI conversation for the exam.
 	ChatHistory(ctx context.Context, examID, ownerID uuid.UUID) ([]model.ChatMessage, error)
 }
@@ -124,21 +125,21 @@ func (s *examService) ChatHistory(ctx context.Context, examID, ownerID uuid.UUID
 	return s.chat.ListByExam(ctx, examID)
 }
 
-func (s *examService) Ask(ctx context.Context, examID, ownerID uuid.UUID, question string) (string, error) {
+func (s *examService) AskStream(ctx context.Context, examID, ownerID uuid.UUID, question string, onChunk func(chunk string)) error {
 	question = strings.TrimSpace(question)
 	if question == "" {
-		return "", apperror.BadRequest("thiếu câu hỏi")
+		return apperror.BadRequest("thiếu câu hỏi")
 	}
 	if _, err := s.GetOwned(ctx, examID, ownerID); err != nil {
-		return "", err
+		return err
 	}
 	qs, err := s.questions.ListByExam(ctx, examID)
 	if err != nil {
-		return "", err
+		return err
 	}
 	prior, err := s.chat.ListByExam(ctx, examID)
 	if err != nil {
-		return "", err
+		return err
 	}
 
 	var b strings.Builder
@@ -157,17 +158,17 @@ func (s *examService) Ask(ctx context.Context, examID, ownerID uuid.UUID, questi
 		history[i] = ChatTurn{Role: m.Role, Text: m.Text}
 	}
 
-	answer, err := s.ai.Ask(ctx, b.String(), history, question)
+	answer, err := s.ai.AskStream(ctx, b.String(), history, question, onChunk)
 	if err != nil {
-		return "", err
+		return err
 	}
 	if err := s.chat.Insert(ctx, examID, "user", question); err != nil {
-		return "", err
+		return err
 	}
 	if err := s.chat.Insert(ctx, examID, "model", answer); err != nil {
-		return "", err
+		return err
 	}
-	return answer, nil
+	return nil
 }
 
 func (s *examService) List(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
