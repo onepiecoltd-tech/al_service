@@ -15,5 +15,28 @@ services:
       timeout: 5s
       retries: 5
 
+  api:
+    build: .
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      # Talk to the postgres service over the compose network (not the host).
+      DATABASE_URL: postgres://admin:secretpassword137@postgres:5432/learning_languages?sslmode=disable
+      PORT: "8080"
+      ENV: ${ENV:-development}
+      # Secrets are interpolated from the local .env (compose reads it
+      # automatically) — they are NOT baked into the image.
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-me}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   postgres_data:
