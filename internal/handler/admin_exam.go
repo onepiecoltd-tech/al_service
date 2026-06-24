@@ -27,6 +27,7 @@ func NewAdminExamHandler(exams service.ExamService, profiles service.ProfileServ
 type examRequest struct {
 	Name      string `json:"name"`
 	Type      string `json:"type"`
+	Language  string `json:"language" example:"en"`
 	Questions int    `json:"questions"`
 	State     string `json:"state" example:"draft"`
 }
@@ -104,6 +105,7 @@ func (h *AdminExamHandler) Create(w http.ResponseWriter, r *http.Request) {
 	exam := &model.Exam{
 		Name:      req.Name,
 		Type:      req.Type,
+		Language:  req.Language,
 		Questions: req.Questions,
 		Author:    h.authorName(r),
 		State:     req.State,
@@ -142,6 +144,7 @@ func (h *AdminExamHandler) Update(w http.ResponseWriter, r *http.Request) {
 		ID:        id,
 		Name:      req.Name,
 		Type:      req.Type,
+		Language:  req.Language,
 		Questions: req.Questions,
 		State:     req.State,
 	})

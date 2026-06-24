@@ -31,8 +31,9 @@ type profileResponse struct {
 	Rank   string `json:"rank"`
 	Streak int    `json:"streak"`
 	Wins   int    `json:"wins"`
-	Role   string `json:"role"`
-	Joined string `json:"joined"`
+	Role             string `json:"role"`
+	Joined           string `json:"joined"`
+	LearningLanguage string `json:"learning_language"`
 }
 
 type profileEnvelope struct { //nolint:unused // referenced by swaggo annotations only
@@ -59,23 +60,29 @@ func (h *ProfileHandler) Me(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, toProfileResponse(u))
+	lang, err := h.profiles.GetLearningLanguage(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, toProfileResponse(u, lang))
 }
 
-func toProfileResponse(u *model.User) profileResponse {
+func toProfileResponse(u *model.User, learningLanguage string) profileResponse {
 	return profileResponse{
-		ID:     u.ID.String(),
-		Email:  u.Email,
-		Name:   u.DisplayName,
-		Handle: u.Handle,
-		Plan:   u.Plan,
-		Coins:  u.Coins,
-		Elo:    u.Elo,
-		Rank:   rankFromElo(u.Elo),
-		Streak: u.Streak,
-		Wins:   u.Wins,
-		Role:   u.Role,
-		Joined: fmt.Sprintf("Tháng %d, %d", int(u.CreatedAt.Month()), u.CreatedAt.Year()),
+		ID:               u.ID.String(),
+		Email:            u.Email,
+		Name:             u.DisplayName,
+		Handle:           u.Handle,
+		Plan:             u.Plan,
+		Coins:            u.Coins,
+		Elo:              u.Elo,
+		Rank:             rankFromElo(u.Elo),
+		Streak:           u.Streak,
+		Wins:             u.Wins,
+		Role:             u.Role,
+		Joined:           fmt.Sprintf("Tháng %d, %d", int(u.CreatedAt.Month()), u.CreatedAt.Year()),
+		LearningLanguage: learningLanguage,
 	}
 }
 
@@ -107,7 +114,43 @@ func (h *ProfileHandler) UpdateMe(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, toProfileResponse(u))
+	lang, err := h.profiles.GetLearningLanguage(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, toProfileResponse(u, lang))
+}
+
+// SetLanguage godoc
+//
+//	@Summary	Set the authenticated user's current learning language
+//	@Tags		profile
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		body	body		object{language=string}	true	"Language code"
+//	@Success	200		{object}	map[string]string
+//	@Failure	400		{object}	errorEnvelope
+//	@Router		/api/v1/me/language [put]
+func (h *ProfileHandler) SetLanguage(w http.ResponseWriter, r *http.Request) {
+	id, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	var body struct {
+		Language string `json:"language"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.Error(w, apperror.BadRequest("dữ liệu không hợp lệ"))
+		return
+	}
+	lang, err := h.profiles.SetLearningLanguage(r.Context(), id, body.Language)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]string{"learning_language": lang})
 }
 
 type prefsEnvelope struct { //nolint:unused // referenced by swaggo annotations only

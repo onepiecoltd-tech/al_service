@@ -41,7 +41,7 @@ func (h *ExamHandler) Mine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	page, limit, offset := httputil.PageParams(r)
-	exams, total, err := h.exams.ListMine(r.Context(), uid, limit, offset)
+	exams, total, err := h.exams.ListMine(r.Context(), uid, r.URL.Query().Get("lang"), limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -59,7 +59,7 @@ func (h *ExamHandler) Mine(w http.ResponseWriter, r *http.Request) {
 //	@Router		/api/v1/exam-bank [get]
 func (h *ExamHandler) Bank(w http.ResponseWriter, r *http.Request) {
 	page, limit, offset := httputil.PageParams(r)
-	exams, total, err := h.exams.ListBank(r.Context(), limit, offset)
+	exams, total, err := h.exams.ListBank(r.Context(), r.URL.Query().Get("lang"), limit, offset)
 	if err != nil {
 		httputil.Error(w, err)
 		return
@@ -243,8 +243,9 @@ func (h *ExamHandler) ChatHistory(w http.ResponseWriter, r *http.Request) {
 //	@Accept		mpfd
 //	@Produce	json
 //	@Security	BearerAuth
-//	@Param		name	formData	string	false	"Exam name (defaults to file name)"
-//	@Param		file	formData	file	true	"Exam file (.pdf or .txt)"
+//	@Param		name		formData	string	false	"Exam name (defaults to file name)"
+//	@Param		language	formData	string	false	"Target language code (defaults to en)"
+//	@Param		file		formData	file	true	"Exam file (.pdf or .txt)"
 //	@Success	200	{object}	map[string]interface{}
 //	@Failure	400	{object}	errorEnvelope
 //	@Router		/api/v1/exams/upload [post]
@@ -278,7 +279,7 @@ func (h *ExamHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		author = u.DisplayName
 	}
 
-	exam, qs, err := h.exams.Upload(r.Context(), uid, author, r.FormValue("name"), header.Filename, data)
+	exam, qs, err := h.exams.Upload(r.Context(), uid, author, r.FormValue("name"), r.FormValue("language"), header.Filename, data)
 	if err != nil {
 		httputil.Error(w, err)
 		return

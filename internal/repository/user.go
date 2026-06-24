@@ -29,6 +29,8 @@ type UserRepository interface {
 	RemoveFriend(ctx context.Context, userID, friendID uuid.UUID) error
 	GetPrefs(ctx context.Context, userID uuid.UUID) (map[string]bool, error)
 	SetPrefs(ctx context.Context, userID uuid.UUID, prefs map[string]bool) error
+	GetLearningLanguage(ctx context.Context, userID uuid.UUID) (string, error)
+	SetLearningLanguage(ctx context.Context, userID uuid.UUID, lang string) error
 	ListAll(ctx context.Context, q, plan string, limit, offset int) ([]model.User, int, error)
 	Insert(ctx context.Context, u *model.User) error
 	UpdateAdminFields(ctx context.Context, id uuid.UUID, plan, role, status string) (*model.User, error)
@@ -392,6 +394,21 @@ func (r *userRepository) SetPrefs(ctx context.Context, userID uuid.UUID, prefs m
 		return apperror.Internal(err)
 	}
 	if _, err := r.db.Exec(ctx, `UPDATE users SET prefs = $2 WHERE id = $1`, userID, raw); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+func (r *userRepository) GetLearningLanguage(ctx context.Context, userID uuid.UUID) (string, error) {
+	var lang string
+	if err := r.db.QueryRow(ctx, `SELECT learning_language FROM users WHERE id = $1`, userID).Scan(&lang); err != nil {
+		return "", apperror.Internal(err)
+	}
+	return lang, nil
+}
+
+func (r *userRepository) SetLearningLanguage(ctx context.Context, userID uuid.UUID, lang string) error {
+	if _, err := r.db.Exec(ctx, `UPDATE users SET learning_language = $2 WHERE id = $1`, userID, lang); err != nil {
 		return apperror.Internal(err)
 	}
 	return nil

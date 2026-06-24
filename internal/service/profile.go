@@ -15,6 +15,9 @@ type ProfileService interface {
 	Get(ctx context.Context, id uuid.UUID) (*model.User, error)
 	GetPrefs(ctx context.Context, id uuid.UUID) (map[string]bool, error)
 	SetPrefs(ctx context.Context, id uuid.UUID, prefs map[string]bool) error
+	GetLearningLanguage(ctx context.Context, id uuid.UUID) (string, error)
+	// SetLearningLanguage normalizes the code and returns the stored value.
+	SetLearningLanguage(ctx context.Context, id uuid.UUID, lang string) (string, error)
 	UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error)
 	// Heartbeat marks the user as currently active, for online presence.
 	Heartbeat(ctx context.Context, id uuid.UUID) error
@@ -38,6 +41,21 @@ func (s *profileService) GetPrefs(ctx context.Context, id uuid.UUID) (map[string
 
 func (s *profileService) SetPrefs(ctx context.Context, id uuid.UUID, prefs map[string]bool) error {
 	return s.users.SetPrefs(ctx, id, prefs)
+}
+
+func (s *profileService) GetLearningLanguage(ctx context.Context, id uuid.UUID) (string, error) {
+	return s.users.GetLearningLanguage(ctx, id)
+}
+
+func (s *profileService) SetLearningLanguage(ctx context.Context, id uuid.UUID, lang string) (string, error) {
+	norm := normalizeLanguage(lang)
+	if norm == "" {
+		return "", apperror.BadRequest("mã ngôn ngữ không hợp lệ")
+	}
+	if err := s.users.SetLearningLanguage(ctx, id, norm); err != nil {
+		return "", err
+	}
+	return norm, nil
 }
 
 func (s *profileService) UpdateDisplayName(ctx context.Context, id uuid.UUID, name string) (*model.User, error) {

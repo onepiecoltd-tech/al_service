@@ -91,6 +91,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("GET /api/v1/me/badges", requireAuth(http.HandlerFunc(badgeHandler.Me)))
 	mux.Handle("GET /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.GetPrefs)))
 	mux.Handle("PUT /api/v1/me/prefs", requireAuth(http.HandlerFunc(profileHandler.SetPrefs)))
+	mux.Handle("PUT /api/v1/me/language", requireAuth(http.HandlerFunc(profileHandler.SetLanguage)))
 	mux.Handle("GET /api/v1/leaderboard", requireAuth(http.HandlerFunc(leaderboardHandler.List)))
 	mux.Handle("GET /api/v1/friends", requireAuth(http.HandlerFunc(friendHandler.List)))
 	mux.Handle("GET /api/v1/friends/requests", requireAuth(http.HandlerFunc(friendHandler.Requests)))

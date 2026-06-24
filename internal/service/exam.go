@@ -22,17 +22,28 @@ type ExamService interface {
 	// replaces the exam's question bank, and updates its question count.
 	Import(ctx context.Context, examID uuid.UUID, filename string, data []byte) ([]model.Question, error)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
-	// ListMine returns only the exams owned by the given user.
-	ListMine(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error)
-	// ListBank returns the published admin question bank, for any user to practice.
-	ListBank(ctx context.Context, limit, offset int) ([]model.Exam, int, error)
+	// ListMine returns only the exams owned by the given user. lang filters by
+	// exam language code; "" means all languages.
+	ListMine(ctx context.Context, ownerID uuid.UUID, lang string, limit, offset int) ([]model.Exam, int, error)
+	// ListBank returns the published admin question bank, for any user to
+	// practice. lang filters by exam language code; "" means all languages.
+	ListBank(ctx context.Context, lang string, limit, offset int) ([]model.Exam, int, error)
 	// GetBank returns a bank exam only if it's published and ownerless, else NotFound.
 	GetBank(ctx context.Context, examID uuid.UUID) (*model.Exam, error)
 	// RandomBankQuestion returns one random question from the published bank,
 	// for use as a random default speaking prompt.
 	RandomBankQuestion(ctx context.Context) (*model.Question, error)
-	// Upload creates a user-owned exam from an uploaded file and imports its questions.
-	Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error)
+	// CreateUpload records a user-owned exam in the 'processing' state, before
+	// its questions are extracted. language is the exam's target language code
+	// (defaults to 'en'). Question extraction is slow (the AI call takes
+	// minutes), so it runs separately via ExtractUpload rather than blocking the
+	// upload request.
+	CreateUpload(ctx context.Context, ownerID uuid.UUID, author, name, language, filename string) (*model.Exam, error)
+	// ExtractUpload extracts questions from the uploaded file and attaches them
+	// to an already-created exam, flipping it to 'published' on success or
+	// 'failed' on error. Intended to run in the background, so it takes its own
+	// context rather than the upload request's.
+	ExtractUpload(ctx context.Context, examID uuid.UUID, filename string, data []byte)
 	// GetOwned returns the exam only if it belongs to ownerID, else NotFound
 	// (never leaks existence of another user's exam).
 	GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error)
@@ -79,12 +90,12 @@ func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.
 	return s.questions.ListByExam(ctx, examID)
 }
 
-func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, limit, offset int) ([]model.Exam, int, error) {
-	return s.repo.ListByOwner(ctx, ownerID, limit, offset)
+func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, lang string, limit, offset int) ([]model.Exam, int, error) {
+	return s.repo.ListByOwner(ctx, ownerID, normalizeLanguage(lang), limit, offset)
 }
 
-func (s *examService) ListBank(ctx context.Context, limit, offset int) ([]model.Exam, int, error) {
-	return s.repo.ListPublished(ctx, limit, offset)
+func (s *examService) ListBank(ctx context.Context, lang string, limit, offset int) ([]model.Exam, int, error) {
+	return s.repo.ListPublished(ctx, normalizeLanguage(lang), limit, offset)
 }
 
 func (s *examService) RandomBankQuestion(ctx context.Context) (*model.Question, error) {
@@ -102,12 +113,16 @@ func (s *examService) GetBank(ctx context.Context, examID uuid.UUID) (*model.Exa
 	return exam, nil
 }
 
-func (s *examService) Upload(ctx context.Context, ownerID uuid.UUID, author, name, filename string, data []byte) (*model.Exam, []model.Question, error) {
+func (s *examService) Upload(ctx context.Context, ownerID uuid.UUID, author, name, language, filename string, data []byte) (*model.Exam, []model.Question, error) {
 	if strings.TrimSpace(name) == "" {
 		name = strings.TrimSuffix(filename, fileExt(filename))
 	}
 	if strings.TrimSpace(name) == "" {
 		return nil, nil, apperror.BadRequest("thiếu tên đề")
+	}
+	lang := normalizeLanguage(language)
+	if lang == "" {
+		lang = "en"
 	}
 	// Extract first so a bad file never leaves an empty exam behind.
 	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
@@ -117,6 +132,7 @@ func (s *examService) Upload(ctx context.Context, ownerID uuid.UUID, author, nam
 	exam := &model.Exam{
 		Name:      name,
 		Type:      "Tự tải lên",
+		Language:  lang,
 		Questions: len(qs),
 		Author:    author,
 		State:     "published",
@@ -233,5 +249,26 @@ func validateExam(e *model.Exam) error {
 	if strings.TrimSpace(e.Type) == "" {
 		return apperror.BadRequest("type is required")
 	}
+	if lang := normalizeLanguage(e.Language); lang == "" {
+		e.Language = "en"
+	} else {
+		e.Language = lang
+	}
 	return nil
+}
+
+// normalizeLanguage lower-cases and trims a language code, returning "" if it
+// isn't a plausible code (2–8 ASCII letters/hyphen, e.g. "en", "zh", "pt-br").
+// The set is intentionally open — callers default empty to "en" where needed.
+func normalizeLanguage(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	if len(s) < 2 || len(s) > 8 {
+		return ""
+	}
+	for _, r := range s {
+		if (r < 'a' || r > 'z') && r != '-' {
+			return ""
+		}
+	}
+	return s
 }
