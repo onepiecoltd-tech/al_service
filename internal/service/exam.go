@@ -113,38 +113,54 @@ func (s *examService) GetBank(ctx context.Context, examID uuid.UUID) (*model.Exa
 	return exam, nil
 }
 
-func (s *examService) Upload(ctx context.Context, ownerID uuid.UUID, author, name, language, filename string, data []byte) (*model.Exam, []model.Question, error) {
+func (s *examService) CreateUpload(ctx context.Context, ownerID uuid.UUID, author, name, language, filename string) (*model.Exam, error) {
 	if strings.TrimSpace(name) == "" {
 		name = strings.TrimSuffix(filename, fileExt(filename))
 	}
 	if strings.TrimSpace(name) == "" {
-		return nil, nil, apperror.BadRequest("thiếu tên đề")
+		return nil, apperror.BadRequest("thiếu tên đề")
 	}
 	lang := normalizeLanguage(language)
 	if lang == "" {
 		lang = "en"
 	}
-	// Extract first so a bad file never leaves an empty exam behind.
-	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
-	if err != nil {
-		return nil, nil, err
-	}
 	exam := &model.Exam{
 		Name:      name,
 		Type:      "Tự tải lên",
 		Language:  lang,
-		Questions: len(qs),
+		Questions: 0,
 		Author:    author,
-		State:     "published",
+		State:     "processing",
 		OwnerID:   &ownerID,
 	}
 	if err := s.repo.Create(ctx, exam); err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	if err := s.questions.ReplaceForExam(ctx, exam.ID, qs); err != nil {
-		return nil, nil, err
+	return exam, nil
+}
+
+func (s *examService) ExtractUpload(ctx context.Context, examID uuid.UUID, filename string, data []byte) {
+	exam, err := s.repo.Get(ctx, examID)
+	if err != nil {
+		return
 	}
-	return exam, qs, nil
+	markFailed := func() {
+		exam.State = "failed"
+		_, _ = s.repo.Update(ctx, exam)
+	}
+
+	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
+	if err != nil {
+		markFailed()
+		return
+	}
+	if err := s.questions.ReplaceForExam(ctx, examID, qs); err != nil {
+		markFailed()
+		return
+	}
+	exam.Questions = len(qs)
+	exam.State = "published"
+	_, _ = s.repo.Update(ctx, exam)
 }
 
 func (s *examService) GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error) {

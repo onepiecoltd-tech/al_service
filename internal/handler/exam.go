@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -254,9 +255,6 @@ func (h *ExamHandler) Upload(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	// AI extraction can take 1-2+ minutes for large PDFs — extend past the
-	// server's default 30s WriteTimeout for this handler only.
-	_ = http.NewResponseController(w).SetWriteDeadline(time.Now().Add(4 * time.Minute))
 	r.Body = http.MaxBytesReader(w, r.Body, 5<<20) // 5 MB cap
 	file, header, err := r.FormFile("file")
 	if err != nil {
@@ -279,10 +277,21 @@ func (h *ExamHandler) Upload(w http.ResponseWriter, r *http.Request) {
 		author = u.DisplayName
 	}
 
-	exam, qs, err := h.exams.Upload(r.Context(), uid, author, r.FormValue("name"), r.FormValue("language"), header.Filename, data)
+	exam, err := h.exams.CreateUpload(r.Context(), uid, author, r.FormValue("name"), r.FormValue("language"), header.Filename)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, map[string]any{"exam": exam, "imported": len(qs)})
+
+	// Extract questions in the background so the client gets a fast response and
+	// can show "uploaded, AI is extracting" instead of waiting minutes. The
+	// goroutine outlives the request, so it uses a fresh context, not r.Context().
+	filename := header.Filename
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		h.exams.ExtractUpload(ctx, exam.ID, filename, data)
+	}()
+
+	httputil.OK(w, map[string]any{"exam": exam, "processing": true})
 }
