@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"strings"
 
 	"github.com/google/uuid"
@@ -159,18 +160,28 @@ func (s *examService) extractInto(ctx context.Context, examID uuid.UUID, filenam
 	if err != nil {
 		return
 	}
-	markFailed := func() {
+	markFailed := func(err error) {
+		// Extraction runs in the background, so its error never reaches the
+		// client — log it here so a "thất bại" exam can be diagnosed.
+		slog.Error("exam extraction failed", "exam_id", examID, "filename", filename, "bytes", len(data), "error", err)
 		exam.State = "failed"
 		_, _ = s.repo.Update(ctx, exam)
 	}
+	// Last-resort guard: a panic in this background goroutine would otherwise
+	// crash the whole server. Mark the exam failed and recover instead.
+	defer func() {
+		if r := recover(); r != nil {
+			markFailed(fmt.Errorf("panic: %v", r))
+		}
+	}()
 
 	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
 	if err != nil {
-		markFailed()
+		markFailed(err)
 		return
 	}
 	if err := s.questions.ReplaceForExam(ctx, examID, qs); err != nil {
-		markFailed()
+		markFailed(err)
 		return
 	}
 	exam.Questions = len(qs)

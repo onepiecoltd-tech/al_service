@@ -226,7 +226,7 @@ func (h *AdminExamHandler) Import(w http.ResponseWriter, r *http.Request) {
 	}
 	filename := header.Filename
 	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		ctx, cancel := context.WithTimeout(context.Background(), 9*time.Minute)
 		defer cancel()
 		h.exams.ExtractImport(ctx, id, filename, data, prior)
 	}()
