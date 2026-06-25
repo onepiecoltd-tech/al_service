@@ -47,11 +47,20 @@ var extractQuestionsSchema = map[string]any{
 			"type": "ARRAY",
 			"items": map[string]any{
 				"type": "OBJECT",
+				// Descriptions tell the model exactly which text goes where —
+				// without them it guesses and often swaps question and answer.
 				"properties": map[string]any{
-					"prompt":        map[string]any{"type": "STRING"},
-					"sample_answer": map[string]any{"type": "STRING"},
+					"prompt": map[string]any{
+						"type":        "STRING",
+						"description": "Nội dung câu hỏi / đề bài mà người làm bài phải trả lời. Tuyệt đối KHÔNG đặt đáp án vào đây.",
+					},
+					"sample_answer": map[string]any{
+						"type":        "STRING",
+						"description": "Đáp án mẫu cho câu hỏi, CHỈ khi đề có sẵn đáp án; nếu không có thì để trống.",
+					},
 				},
-				"required": []string{"prompt"},
+				"propertyOrdering": []string{"prompt", "sample_answer"},
+				"required":         []string{"prompt"},
 			},
 		},
 	},
@@ -67,7 +76,12 @@ func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, da
 
 	parts := []map[string]any{
 		{
-			"text": "Đây là một đề thi. Hãy đọc toàn bộ nội dung và trích ra từng câu hỏi cùng đáp án mẫu nếu đề có sẵn. Bỏ qua tiêu đề, hướng dẫn làm bài, số trang.",
+			"text": "Đây là một đề thi. Hãy đọc toàn bộ nội dung và trích ra từng câu hỏi. " +
+				"Với mỗi mục: 'prompt' là nội dung câu hỏi/đề bài (KHÔNG bao giờ chứa đáp án), " +
+				"'sample_answer' là đáp án mẫu CHỈ khi đề có sẵn, không có thì để trống. " +
+				"Nếu một mục không có phần câu hỏi (ví dụ chỉ là bảng đáp án) thì bỏ qua, " +
+				"tuyệt đối không tự bịa câu hỏi và không chuyển đáp án vào ô câu hỏi. " +
+				"Bỏ qua tiêu đề, hướng dẫn làm bài, số trang.",
 		},
 	}
 
