@@ -48,6 +48,7 @@ func (s *Server) routes() http.Handler {
 	settingService := service.NewSettingService(settingRepo)
 	aiClient := service.NewGeminiClient(s.cfg.GeminiAPIKey)
 	examService := service.NewExamService(examRepo, questionRepo, chatMessageRepo, aiClient)
+	s.answerJob = service.NewAnswerBackfiller(questionRepo, aiClient)
 	speakingService := service.NewSpeakingService(aiClient, pronunciationWordRepo)
 	commentService := service.NewCommentService(commentRepo)
 	overviewService := service.NewOverviewService(overviewRepo)
@@ -69,6 +70,7 @@ func (s *Server) routes() http.Handler {
 	adminSettingHandler := handler.NewAdminSettingHandler(settingService)
 	statusHandler := handler.NewStatusHandler(settingService)
 	adminExamHandler := handler.NewAdminExamHandler(examService, profileService)
+	adminBackfillHandler := handler.NewAdminBackfillHandler(s.answerJob)
 	examHandler := handler.NewExamHandler(examService, profileService)
 	speakingHandler := handler.NewSpeakingHandler(speakingService)
 	directMessageHandler := handler.NewDirectMessageHandler(directMessageService, s.cfg.JWTSecret, adminUserService.IsActive)
@@ -172,6 +174,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("DELETE /api/v1/admin/exams/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Delete))))
 	mux.Handle("POST /api/v1/admin/exams/{id}/import", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Import))))
 	mux.Handle("GET /api/v1/admin/exams/{id}/questions", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Questions))))
+	mux.Handle("POST /api/v1/admin/questions/backfill-answers", requireAuth(requireAdmin(http.HandlerFunc(adminBackfillHandler.TriggerAnswers))))
 
 	mux.Handle("GET /api/v1/blog", optionalAuth(http.HandlerFunc(blogHandler.List)))
 	mux.Handle("GET /api/v1/blog/{id}", optionalAuth(http.HandlerFunc(blogHandler.Get)))

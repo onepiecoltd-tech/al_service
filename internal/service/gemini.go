@@ -240,6 +240,74 @@ func (c *GeminiClient) generateQuestions(ctx context.Context, parts []map[string
 	return out.Questions, nil
 }
 
+// GenerateAnswer produces a concise model answer for a single exam question,
+// in the exam's target language. Used by the background answer-backfill job.
+func (c *GeminiClient) GenerateAnswer(ctx context.Context, prompt, language string) (string, error) {
+	if c.apiKey == "" {
+		return "", apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
+	}
+
+	sys := "Bạn là giáo viên luyện thi. Hãy viết một đáp án mẫu ngắn gọn, chất lượng cao cho câu hỏi/đề bài sau, " +
+		"bằng đúng ngôn ngữ của đề thi"
+	if language != "" {
+		sys += " (mã ngôn ngữ: " + language + ")"
+	}
+	sys += ". Chỉ trả về nội dung đáp án, không thêm lời dẫn hay giải thích thừa."
+
+	reqBody := map[string]any{
+		"system_instruction": map[string]any{"parts": []map[string]any{{"text": sys}}},
+		"contents":           []map[string]any{{"parts": []map[string]any{{"text": prompt}}}},
+		// A model answer is straightforward generation — skip the thinking phase
+		// to keep the batch job fast and cheap.
+		"generationConfig": map[string]any{"thinkingConfig": map[string]any{"thinkingBudget": 0}},
+	}
+	buf, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+
+	url := fmt.Sprintf(geminiAPIURLTemplate, c.model)
+	if geminiAPIURLOverride != "" {
+		url = geminiAPIURLOverride
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+	req.Header.Set("content-type", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
+
+	resp, err := c.http.Do(req)
+	if err != nil {
+		return "", apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
+	}
+	defer resp.Body.Close()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", apperror.Internal(err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		return "", apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
+	}
+
+	var parsed struct {
+		Candidates []struct {
+			Content struct {
+				Parts []struct {
+					Text string `json:"text"`
+				} `json:"parts"`
+			} `json:"content"`
+		} `json:"candidates"`
+	}
+	if err := json.Unmarshal(respBody, &parsed); err != nil {
+		return "", apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
+	}
+	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
+		return "", apperror.Internal(fmt.Errorf("Gemini không trả về đáp án"))
+	}
+	return parsed.Candidates[0].Content.Parts[0].Text, nil
+}
+
 // extractPDFChunks uploads each page-range chunk to the Files API and extracts
 // its questions with bounded parallelism, then concatenates them in page order.
 // A failed chunk is logged and skipped; only an all-chunks failure is an error.

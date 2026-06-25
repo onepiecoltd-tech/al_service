@@ -20,6 +20,15 @@ type QuestionRepository interface {
 	// RandomFromBank returns one random question from the published admin
 	// question bank (owner_id IS NULL exams), for use as a speaking prompt.
 	RandomFromBank(ctx context.Context) (*model.Question, error)
+	// ListMissingAnswers returns up to limit questions that still have no sample
+	// answer (and haven't exhausted answer attempts), for the backfill job. Backed
+	// by a partial index so it never scans the full questions table.
+	ListMissingAnswers(ctx context.Context, limit int) ([]model.QuestionNeedingAnswer, error)
+	// SetSampleAnswer stores a generated answer for a question.
+	SetSampleAnswer(ctx context.Context, id uuid.UUID, answer string) error
+	// BumpAnswerAttempt records a failed answer-generation attempt, so a question
+	// the AI can't answer eventually drops out of the backfill index.
+	BumpAnswerAttempt(ctx context.Context, id uuid.UUID) error
 }
 
 type questionRepository struct {
@@ -68,6 +77,48 @@ func (r *questionRepository) RandomFromBank(ctx context.Context) (*model.Questio
 		return nil, apperror.Internal(err)
 	}
 	return &q, nil
+}
+
+func (r *questionRepository) ListMissingAnswers(ctx context.Context, limit int) ([]model.QuestionNeedingAnswer, error) {
+	// The WHERE matches idx_questions_missing_answer's predicate exactly so the
+	// partial index is used — only unanswered, not-yet-exhausted rows are touched.
+	rows, err := r.db.Query(ctx,
+		`SELECT q.id, q.prompt, e.language
+		 FROM questions q JOIN exams e ON e.id = q.exam_id
+		 WHERE q.sample_answer = '' AND q.answer_attempts < 3
+		 ORDER BY q.created_at
+		 LIMIT $1`, limit)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	defer rows.Close()
+
+	out := []model.QuestionNeedingAnswer{}
+	for rows.Next() {
+		var q model.QuestionNeedingAnswer
+		if err := rows.Scan(&q.ID, &q.Prompt, &q.Language); err != nil {
+			return nil, apperror.Internal(err)
+		}
+		out = append(out, q)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.Internal(err)
+	}
+	return out, nil
+}
+
+func (r *questionRepository) SetSampleAnswer(ctx context.Context, id uuid.UUID, answer string) error {
+	if _, err := r.db.Exec(ctx, `UPDATE questions SET sample_answer = $2 WHERE id = $1`, id, answer); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
+}
+
+func (r *questionRepository) BumpAnswerAttempt(ctx context.Context, id uuid.UUID) error {
+	if _, err := r.db.Exec(ctx, `UPDATE questions SET answer_attempts = answer_attempts + 1 WHERE id = $1`, id); err != nil {
+		return apperror.Internal(err)
+	}
+	return nil
 }
 
 func (r *questionRepository) ListByExam(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {

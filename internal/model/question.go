@@ -14,3 +14,11 @@ type Question struct {
 	SampleAnswer string    `json:"sample_answer"`
 	CreatedAt    time.Time `json:"created_at"`
 }
+
+// QuestionNeedingAnswer is a question with no sample answer yet, plus its exam's
+// language, for the AI answer-backfill job.
+type QuestionNeedingAnswer struct {
+	ID       uuid.UUID
+	Prompt   string
+	Language string
+}
