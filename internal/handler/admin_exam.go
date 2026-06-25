@@ -201,11 +201,13 @@ func (h *AdminExamHandler) Import(w http.ResponseWriter, r *http.Request) {
 	// server's default 30s WriteTimeout for this handler only.
 	rc := http.NewResponseController(w)
 	_ = rc.SetWriteDeadline(time.Now().Add(4 * time.Minute))
-	r.Body = http.MaxBytesReader(w, r.Body, 5<<20) // 5 MB cap
+	// Admins (the only callers of this route) get a higher cap than normal
+	// users' 5 MB upload — large bank PDFs are imported here.
+	r.Body = http.MaxBytesReader(w, r.Body, 50<<20) // 50 MB cap
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		if err.Error() == "http: request body too large" {
-			httputil.Error(w, apperror.BadRequest("tệp vượt quá giới hạn 5MB"))
+			httputil.Error(w, apperror.BadRequest("tệp vượt quá giới hạn 50MB"))
 			return
 		}
 		httputil.Error(w, apperror.BadRequest("thiếu tệp đề thi (field \"file\")"))
