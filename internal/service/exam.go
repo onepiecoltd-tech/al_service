@@ -18,9 +18,15 @@ type ExamService interface {
 	Create(ctx context.Context, e *model.Exam) error
 	Update(ctx context.Context, e *model.Exam) (*model.Exam, error)
 	Delete(ctx context.Context, id uuid.UUID) error
-	// Import uses Gemini to extract questions from an uploaded exam file (.pdf or .txt),
-	// replaces the exam's question bank, and updates its question count.
-	Import(ctx context.Context, examID uuid.UUID, filename string, data []byte) ([]model.Question, error)
+	// MarkImporting flips an existing exam to the 'processing' state ahead of a
+	// background (re-)extraction, returning its previous state so ExtractImport
+	// can restore it once extraction finishes.
+	MarkImporting(ctx context.Context, examID uuid.UUID) (string, error)
+	// ExtractImport (re-)extracts questions for an existing exam in the
+	// background, replacing its question bank and restoring it to restoreState on
+	// success, or marking it 'failed' on error. Like ExtractUpload, the AI call
+	// is slow, so this is meant to run off the request goroutine.
+	ExtractImport(ctx context.Context, examID uuid.UUID, filename string, data []byte, restoreState string)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
 	// ListMine returns only the exams owned by the given user. lang filters by
 	// exam language code; "" means all languages.
@@ -67,23 +73,24 @@ func NewExamService(repo repository.ExamRepository, questions repository.Questio
 	return &examService{repo: repo, questions: questions, chat: chat, ai: ai}
 }
 
-func (s *examService) Import(ctx context.Context, examID uuid.UUID, filename string, data []byte) ([]model.Question, error) {
+func (s *examService) MarkImporting(ctx context.Context, examID uuid.UUID) (string, error) {
 	exam, err := s.repo.Get(ctx, examID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
-	if err != nil {
-		return nil, err
+	prior := exam.State
+	if prior == "processing" {
+		prior = "draft" // never restore back into the transient state
 	}
-	if err := s.questions.ReplaceForExam(ctx, examID, qs); err != nil {
-		return nil, err
-	}
-	exam.Questions = len(qs)
+	exam.State = "processing"
 	if _, err := s.repo.Update(ctx, exam); err != nil {
-		return nil, err
+		return "", err
 	}
-	return qs, nil
+	return prior, nil
+}
+
+func (s *examService) ExtractImport(ctx context.Context, examID uuid.UUID, filename string, data []byte, restoreState string) {
+	s.extractInto(ctx, examID, filename, data, restoreState)
 }
 
 func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {
@@ -140,6 +147,14 @@ func (s *examService) CreateUpload(ctx context.Context, ownerID uuid.UUID, autho
 }
 
 func (s *examService) ExtractUpload(ctx context.Context, examID uuid.UUID, filename string, data []byte) {
+	s.extractInto(ctx, examID, filename, data, "published")
+}
+
+// extractInto runs the AI extraction for an existing exam and replaces its
+// question bank, flipping the exam to successState on success or 'failed' on
+// error. Shared by the user upload (successState "published") and admin import
+// (successState = the exam's prior, restored state).
+func (s *examService) extractInto(ctx context.Context, examID uuid.UUID, filename string, data []byte, successState string) {
 	exam, err := s.repo.Get(ctx, examID)
 	if err != nil {
 		return
@@ -159,7 +174,7 @@ func (s *examService) ExtractUpload(ctx context.Context, examID uuid.UUID, filen
 		return
 	}
 	exam.Questions = len(qs)
-	exam.State = "published"
+	exam.State = successState
 	_, _ = s.repo.Update(ctx, exam)
 }
 

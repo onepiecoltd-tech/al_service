@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -197,10 +198,6 @@ func (h *AdminExamHandler) Import(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, apperror.BadRequest("invalid exam id"))
 		return
 	}
-	// AI extraction can take 1-2+ minutes for large PDFs — extend past the
-	// server's default 30s WriteTimeout for this handler only.
-	rc := http.NewResponseController(w)
-	_ = rc.SetWriteDeadline(time.Now().Add(4 * time.Minute))
 	// Admins (the only callers of this route) get a higher cap than normal
 	// users' 5 MB upload — large bank PDFs are imported here.
 	r.Body = http.MaxBytesReader(w, r.Body, 50<<20) // 50 MB cap
@@ -219,12 +216,22 @@ func (h *AdminExamHandler) Import(w http.ResponseWriter, r *http.Request) {
 		httputil.Error(w, apperror.BadRequest("không đọc được tệp tải lên"))
 		return
 	}
-	qs, err := h.exams.Import(r.Context(), id, header.Filename, data)
+
+	// Flip the exam to 'processing' now, then extract in the background so the
+	// admin gets a fast response instead of waiting minutes on the AI call.
+	prior, err := h.exams.MarkImporting(r.Context(), id)
 	if err != nil {
 		httputil.Error(w, err)
 		return
 	}
-	httputil.OK(w, map[string]any{"imported": len(qs), "questions": qs})
+	filename := header.Filename
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		defer cancel()
+		h.exams.ExtractImport(ctx, id, filename, data, prior)
+	}()
+
+	httputil.OK(w, map[string]any{"processing": true})
 }
 
 // Questions godoc
