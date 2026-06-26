@@ -134,7 +134,7 @@ func (s *examService) CreateUpload(ctx context.Context, ownerID uuid.UUID, autho
 	}
 	exam := &model.Exam{
 		Name:      name,
-		Type:      "Tự tải lên",
+		Type:      "", // skill (LRWS) is set by the AI once extraction finishes
 		Language:  lang,
 		Questions: 0,
 		Author:    author,
@@ -175,7 +175,7 @@ func (s *examService) extractInto(ctx context.Context, examID uuid.UUID, filenam
 		}
 	}()
 
-	qs, err := s.ai.ExtractQuestions(ctx, filename, data)
+	skill, qs, err := s.ai.ExtractQuestions(ctx, filename, data)
 	if err != nil {
 		markFailed(err)
 		return
@@ -186,7 +186,27 @@ func (s *examService) extractInto(ctx context.Context, examID uuid.UUID, filenam
 	}
 	exam.Questions = len(qs)
 	exam.State = successState
+	// The AI classifies the exam's skill (LRWS); store it as the exam type.
+	if label := skillLabel(skill); label != "" {
+		exam.Type = label
+	}
 	_, _ = s.repo.Update(ctx, exam)
+}
+
+// skillLabel maps an AI skill code to the Vietnamese label stored in exam.Type.
+func skillLabel(skill string) string {
+	switch skill {
+	case "listening":
+		return "Nghe"
+	case "reading":
+		return "Đọc"
+	case "writing":
+		return "Viết"
+	case "speaking":
+		return "Nói"
+	default:
+		return ""
+	}
 }
 
 func (s *examService) GetOwned(ctx context.Context, examID, ownerID uuid.UUID) (*model.Exam, error) {
@@ -268,7 +288,10 @@ func (s *examService) Create(ctx context.Context, e *model.Exam) error {
 		return err
 	}
 	if e.State == "" {
-		e.State = "draft"
+		// No draft stage: a new admin exam is published. While its file is being
+		// imported it sits in 'processing' (set by MarkImporting) and is hidden
+		// from the bank until extraction finishes.
+		e.State = "published"
 	}
 	return s.repo.Create(ctx, e)
 }
@@ -288,9 +311,8 @@ func validateExam(e *model.Exam) error {
 	if strings.TrimSpace(e.Name) == "" {
 		return apperror.BadRequest("name is required")
 	}
-	if strings.TrimSpace(e.Type) == "" {
-		return apperror.BadRequest("type is required")
-	}
+	// Type (the skill: LRWS) is no longer required up front — the AI assigns it
+	// during extraction. A fileless create just leaves it blank.
 	if lang := normalizeLanguage(e.Language); lang == "" {
 		e.Language = "en"
 	} else {

@@ -65,6 +65,11 @@ func NewGeminiClient(apiKey string) *GeminiClient {
 var extractQuestionsSchema = map[string]any{
 	"type": "OBJECT",
 	"properties": map[string]any{
+		"skill": map[string]any{
+			"type":        "STRING",
+			"enum":        []string{"listening", "reading", "writing", "speaking"},
+			"description": "Kỹ năng chính mà đề thi này luyện: listening (nghe), reading (đọc), writing (viết), speaking (nói).",
+		},
 		"questions": map[string]any{
 			"type": "ARRAY",
 			"items": map[string]any{
@@ -86,11 +91,12 @@ var extractQuestionsSchema = map[string]any{
 			},
 		},
 	},
-	"required": []string{"questions"},
+	"required": []string{"skill", "questions"},
 }
 
 // extractInstruction tells Gemini what to pull out of each exam page/chunk.
-const extractInstruction = "Đây là một đề thi. Hãy đọc toàn bộ nội dung và trích ra từng câu hỏi. " +
+const extractInstruction = "Đây là một đề thi luyện ngôn ngữ. Hãy đọc toàn bộ nội dung và trích ra từng câu hỏi. " +
+	"Đồng thời xác định 'skill' — kỹ năng chính của đề: listening (nghe), reading (đọc), writing (viết) hoặc speaking (nói). " +
 	"Với mỗi mục: 'prompt' là nội dung câu hỏi/đề bài (KHÔNG bao giờ chứa đáp án), " +
 	"'sample_answer' là đáp án mẫu CHỈ khi đề có sẵn, không có thì để trống. " +
 	"Nếu một mục không có phần câu hỏi (ví dụ chỉ là bảng đáp án) thì bỏ qua, " +
@@ -107,14 +113,16 @@ type parsedQuestion struct {
 	SampleAnswer string `json:"sample_answer"`
 }
 
-// ExtractQuestions extracts exam questions from an uploaded file. .txt is sent
-// inline; .pdf is uploaded via the Files API and, when long, split into
-// page-range chunks extracted in parallel and merged in page order.
-func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, data []byte) ([]model.Question, error) {
+// ExtractQuestions extracts exam questions from an uploaded file and the exam's
+// primary skill (listening/reading/writing/speaking). .txt is sent inline; .pdf
+// is uploaded via the Files API and, when long, split into page-range chunks
+// extracted in parallel and merged in page order.
+func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, data []byte) (string, []model.Question, error) {
 	if c.apiKey == "" {
-		return nil, apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
+		return "", nil, apperror.Internal(fmt.Errorf("thiếu GEMINI_API_KEY trên server"))
 	}
 
+	var skill string
 	var raw []parsedQuestion
 	switch ext := strings.ToLower(fileExt(filename)); ext {
 	case ".pdf":
@@ -127,21 +135,21 @@ func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, da
 		} else {
 			slog.Info("pdf split for extraction", "filename", filename, "chunks", len(chunks))
 		}
-		raw, err = c.extractPDFChunks(ctx, chunks)
+		skill, raw, err = c.extractPDFChunks(ctx, chunks)
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 	case ".txt":
 		var err error
-		raw, err = c.generateQuestions(ctx, []map[string]any{
+		skill, raw, err = c.generateQuestions(ctx, []map[string]any{
 			{"text": extractInstruction},
 			{"text": string(data)},
 		})
 		if err != nil {
-			return nil, err
+			return "", nil, err
 		}
 	default:
-		return nil, apperror.BadRequest("chỉ hỗ trợ tệp .pdf hoặc .txt")
+		return "", nil, apperror.BadRequest("chỉ hỗ trợ tệp .pdf hoặc .txt")
 	}
 
 	qs := make([]model.Question, 0, len(raw))
@@ -157,14 +165,25 @@ func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, da
 		})
 	}
 	if len(qs) == 0 {
-		return nil, apperror.BadRequest("AI không tìm thấy câu hỏi nào trong tệp")
+		return "", nil, apperror.BadRequest("AI không tìm thấy câu hỏi nào trong tệp")
 	}
-	return qs, nil
+	return normalizeSkill(skill), qs, nil
+}
+
+// normalizeSkill lower-cases and validates a skill against the known set,
+// returning "" if it isn't one of listening/reading/writing/speaking.
+func normalizeSkill(s string) string {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "listening", "reading", "writing", "speaking":
+		return strings.ToLower(strings.TrimSpace(s))
+	default:
+		return ""
+	}
 }
 
 // generateQuestions runs a single generateContent call with the given parts and
-// returns the raw (unfiltered, unpositioned) question list.
-func (c *GeminiClient) generateQuestions(ctx context.Context, parts []map[string]any) ([]parsedQuestion, error) {
+// returns the detected skill and the raw (unfiltered, unpositioned) question list.
+func (c *GeminiClient) generateQuestions(ctx context.Context, parts []map[string]any) (string, []parsedQuestion, error) {
 	reqBody := map[string]any{
 		"contents": []map[string]any{
 			{"parts": parts},
@@ -179,7 +198,7 @@ func (c *GeminiClient) generateQuestions(ctx context.Context, parts []map[string
 	}
 	buf, err := json.Marshal(reqBody)
 	if err != nil {
-		return nil, apperror.Internal(err)
+		return "", nil, apperror.Internal(err)
 	}
 
 	url := fmt.Sprintf(geminiAPIURLTemplate, c.model)
@@ -188,22 +207,22 @@ func (c *GeminiClient) generateQuestions(ctx context.Context, parts []map[string
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(buf))
 	if err != nil {
-		return nil, apperror.Internal(err)
+		return "", nil, apperror.Internal(err)
 	}
 	req.Header.Set("content-type", "application/json")
 	req.Header.Set("x-goog-api-key", c.apiKey)
 
 	resp, err := c.http.Do(req)
 	if err != nil {
-		return nil, apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
+		return "", nil, apperror.Internal(fmt.Errorf("gọi Gemini API thất bại: %w", err))
 	}
 	defer resp.Body.Close()
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, apperror.Internal(err)
+		return "", nil, apperror.Internal(err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
+		return "", nil, apperror.Internal(fmt.Errorf("Gemini API lỗi (%d): %s", resp.StatusCode, string(respBody)))
 	}
 
 	var parsed struct {
@@ -217,27 +236,28 @@ func (c *GeminiClient) generateQuestions(ctx context.Context, parts []map[string
 		} `json:"candidates"`
 	}
 	if err := json.Unmarshal(respBody, &parsed); err != nil {
-		return nil, apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
+		return "", nil, apperror.Internal(fmt.Errorf("không đọc được phản hồi từ Gemini: %w", err))
 	}
 	if len(parsed.Candidates) == 0 || len(parsed.Candidates[0].Content.Parts) == 0 {
 		// MAX_TOKENS with no usable content means the input was too large for one
 		// pass — surface a clear, actionable message instead of a vague decode error.
 		if len(parsed.Candidates) > 0 && parsed.Candidates[0].FinishReason == "MAX_TOKENS" {
-			return nil, apperror.BadRequest("phần đề quá lớn để AI xử lý một lần — hãy tải lên từng phần nhỏ hơn")
+			return "", nil, apperror.BadRequest("phần đề quá lớn để AI xử lý một lần — hãy tải lên từng phần nhỏ hơn")
 		}
-		return nil, apperror.Internal(fmt.Errorf("Gemini không trả về kết quả trích xuất"))
+		return "", nil, apperror.Internal(fmt.Errorf("Gemini không trả về kết quả trích xuất"))
 	}
 	if parsed.Candidates[0].FinishReason == "MAX_TOKENS" {
-		return nil, apperror.BadRequest("phần đề quá lớn để AI xử lý một lần — hãy tải lên từng phần nhỏ hơn")
+		return "", nil, apperror.BadRequest("phần đề quá lớn để AI xử lý một lần — hãy tải lên từng phần nhỏ hơn")
 	}
 
 	var out struct {
+		Skill     string           `json:"skill"`
 		Questions []parsedQuestion `json:"questions"`
 	}
 	if err := json.Unmarshal([]byte(parsed.Candidates[0].Content.Parts[0].Text), &out); err != nil {
-		return nil, apperror.Internal(fmt.Errorf("không đọc được câu hỏi từ Gemini: %w", err))
+		return "", nil, apperror.Internal(fmt.Errorf("không đọc được câu hỏi từ Gemini: %w", err))
 	}
-	return out.Questions, nil
+	return out.Skill, out.Questions, nil
 }
 
 // GenerateAnswer produces a concise model answer for a single exam question,
@@ -311,8 +331,9 @@ func (c *GeminiClient) GenerateAnswer(ctx context.Context, prompt, language stri
 // extractPDFChunks uploads each page-range chunk to the Files API and extracts
 // its questions with bounded parallelism, then concatenates them in page order.
 // A failed chunk is logged and skipped; only an all-chunks failure is an error.
-func (c *GeminiClient) extractPDFChunks(ctx context.Context, chunks [][]byte) ([]parsedQuestion, error) {
+func (c *GeminiClient) extractPDFChunks(ctx context.Context, chunks [][]byte) (string, []parsedQuestion, error) {
 	results := make([][]parsedQuestion, len(chunks))
+	skills := make([]string, len(chunks))
 	errs := make([]error, len(chunks))
 	sem := make(chan struct{}, chunkConcurrency)
 	var wg sync.WaitGroup
@@ -335,7 +356,7 @@ func (c *GeminiClient) extractPDFChunks(ctx context.Context, chunks [][]byte) ([
 				errs[i] = err
 				return
 			}
-			qs, err := c.generateQuestions(ctx, []map[string]any{
+			skill, qs, err := c.generateQuestions(ctx, []map[string]any{
 				{"text": extractInstruction},
 				{"file_data": map[string]any{"mime_type": "application/pdf", "file_uri": uri}},
 			})
@@ -343,6 +364,7 @@ func (c *GeminiClient) extractPDFChunks(ctx context.Context, chunks [][]byte) ([
 				errs[i] = err
 				return
 			}
+			skills[i] = skill
 			results[i] = qs
 		}(i)
 	}
@@ -360,14 +382,22 @@ func (c *GeminiClient) extractPDFChunks(ctx context.Context, chunks [][]byte) ([
 		}
 	}
 	if failed == len(chunks) {
-		return nil, firstErr
+		return "", nil, firstErr
 	}
 
+	// One skill for the whole exam: take the first chunk that classified one.
+	var skill string
+	for _, s := range skills {
+		if s != "" {
+			skill = s
+			break
+		}
+	}
 	var all []parsedQuestion
 	for _, r := range results {
 		all = append(all, r...)
 	}
-	return all, nil
+	return skill, all, nil
 }
 
 // splitPDF splits a PDF into chunks of at most perChunk pages each. A PDF with

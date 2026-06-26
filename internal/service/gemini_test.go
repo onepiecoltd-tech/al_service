@@ -10,7 +10,7 @@ import (
 func TestExtractQuestionsParsesGeminiResponse(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("content-type", "application/json")
-		w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"questions\":[{\"prompt\":\"What is your job?\",\"sample_answer\":\"I'm a teacher.\"},{\"prompt\":\"  \"},{\"prompt\":\"Describe your hometown.\",\"sample_answer\":\"\"}]}"}]}}]}`))
+		w.Write([]byte(`{"candidates":[{"content":{"parts":[{"text":"{\"skill\":\"speaking\",\"questions\":[{\"prompt\":\"What is your job?\",\"sample_answer\":\"I'm a teacher.\"},{\"prompt\":\"  \"},{\"prompt\":\"Describe your hometown.\",\"sample_answer\":\"\"}]}"}]}}]}`))
 	}))
 	defer srv.Close()
 
@@ -20,9 +20,12 @@ func TestExtractQuestionsParsesGeminiResponse(t *testing.T) {
 	geminiAPIURLOverride = srv.URL
 	defer func() { geminiAPIURLOverride = origURL }()
 
-	qs, err := c.ExtractQuestions(context.Background(), "exam.txt", []byte("Q1: What is your job?"))
+	skill, qs, err := c.ExtractQuestions(context.Background(), "exam.txt", []byte("Q1: What is your job?"))
 	if err != nil {
 		t.Fatal(err)
+	}
+	if skill != "speaking" {
+		t.Fatalf("got skill %q, want speaking", skill)
 	}
 	if len(qs) != 2 {
 		t.Fatalf("got %d questions, want 2", len(qs))
@@ -37,7 +40,7 @@ func TestExtractQuestionsParsesGeminiResponse(t *testing.T) {
 
 func TestExtractQuestionsRejectsUnsupportedExt(t *testing.T) {
 	c := NewGeminiClient("test-key")
-	if _, err := c.ExtractQuestions(context.Background(), "exam.docx", []byte("x")); err == nil {
+	if _, _, err := c.ExtractQuestions(context.Background(), "exam.docx", []byte("x")); err == nil {
 		t.Fatal("want error for unsupported extension")
 	}
 }
