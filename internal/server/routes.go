@@ -176,6 +176,11 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /api/v1/admin/exams/{id}/import", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Import))))
 	mux.Handle("GET /api/v1/admin/exams/{id}/questions", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.Questions))))
 	mux.Handle("POST /api/v1/admin/questions/backfill-answers", requireAuth(requireAdmin(http.HandlerFunc(adminBackfillHandler.TriggerAnswers))))
+	mux.Handle("GET /api/v1/admin/questions", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.ListQuestions))))
+	mux.Handle("GET /api/v1/admin/questions/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.GetQuestion))))
+	mux.Handle("PUT /api/v1/admin/questions/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.UpdateQuestion))))
+	mux.Handle("DELETE /api/v1/admin/questions/{id}", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.DeleteQuestion))))
+	mux.Handle("POST /api/v1/admin/questions/{id}/generate-answer", requireAuth(requireAdmin(http.HandlerFunc(adminExamHandler.GenerateAnswer))))
 
 	mux.Handle("GET /api/v1/blog", optionalAuth(http.HandlerFunc(blogHandler.List)))
 	mux.Handle("GET /api/v1/blog/{id}", optionalAuth(http.HandlerFunc(blogHandler.Get)))

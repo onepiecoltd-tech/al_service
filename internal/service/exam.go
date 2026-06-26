@@ -29,6 +29,19 @@ type ExamService interface {
 	// is slow, so this is meant to run off the request goroutine.
 	ExtractImport(ctx context.Context, examID uuid.UUID, filename string, data []byte, restoreState string)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
+	// AdminListQuestions returns a paginated, filtered question list for the admin
+	// management screen. skill/lang/answered/search are optional filters.
+	AdminListQuestions(ctx context.Context, skill, lang, answered, search string, limit, offset int) ([]model.AdminQuestion, int, error)
+	// AdminGetQuestion returns one question (with exam name + language) for the
+	// admin detail/edit page.
+	AdminGetQuestion(ctx context.Context, id uuid.UUID) (model.AdminQuestion, error)
+	// AdminUpdateQuestion edits a question's prompt and sample answer (admin).
+	AdminUpdateQuestion(ctx context.Context, id uuid.UUID, prompt, sampleAnswer string) error
+	// AdminDeleteQuestion removes a single question (admin).
+	AdminDeleteQuestion(ctx context.Context, id uuid.UUID) error
+	// AdminGenerateAnswer generates a sample answer for one question via AI and
+	// stores it, returning the generated answer.
+	AdminGenerateAnswer(ctx context.Context, id uuid.UUID) (string, error)
 	// PracticeQuestions pools random questions of a skill across the bank and the
 	// user's own exams, for skill-based (not exam-based) practice. source narrows
 	// to "bank" or "mine" ("" = both); search is a full-text filter over the
@@ -101,6 +114,47 @@ func (s *examService) ExtractImport(ctx context.Context, examID uuid.UUID, filen
 
 func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {
 	return s.questions.ListByExam(ctx, examID)
+}
+
+func (s *examService) AdminListQuestions(ctx context.Context, skill, lang, answered, search string, limit, offset int) ([]model.AdminQuestion, int, error) {
+	if answered != "yes" && answered != "no" {
+		answered = ""
+	}
+	return s.questions.ListAdmin(ctx, normalizeSkill(skill), normalizeLanguage(lang), answered, strings.TrimSpace(search), limit, offset)
+}
+
+func (s *examService) AdminGetQuestion(ctx context.Context, id uuid.UUID) (model.AdminQuestion, error) {
+	return s.questions.GetAdmin(ctx, id)
+}
+
+func (s *examService) AdminUpdateQuestion(ctx context.Context, id uuid.UUID, prompt, sampleAnswer string) error {
+	prompt = strings.TrimSpace(prompt)
+	if prompt == "" {
+		return apperror.BadRequest("nội dung câu hỏi không được để trống")
+	}
+	return s.questions.UpdateContent(ctx, id, prompt, strings.TrimSpace(sampleAnswer))
+}
+
+func (s *examService) AdminDeleteQuestion(ctx context.Context, id uuid.UUID) error {
+	return s.questions.Delete(ctx, id)
+}
+
+func (s *examService) AdminGenerateAnswer(ctx context.Context, id uuid.UUID) (string, error) {
+	q, err := s.questions.GetForAnswer(ctx, id)
+	if err != nil {
+		return "", err
+	}
+	answer, err := s.ai.GenerateAnswer(ctx, q.Prompt, q.Language)
+	if err != nil {
+		return "", err
+	}
+	if answer = strings.TrimSpace(answer); answer == "" {
+		return "", apperror.Internal(fmt.Errorf("ai returned empty answer for question %s", id))
+	}
+	if err := s.questions.SetSampleAnswer(ctx, id, answer); err != nil {
+		return "", err
+	}
+	return answer, nil
 }
 
 func (s *examService) PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang, source, search string, limit int) ([]model.Question, error) {

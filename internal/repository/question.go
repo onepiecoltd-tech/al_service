@@ -25,6 +25,21 @@ type QuestionRepository interface {
 	// source narrows to "bank" or "mine" ("" = both); search filters by a
 	// case-insensitive substring over the prompt and sample answer ("" = no filter).
 	ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang, source, search string, limit int) ([]model.Question, error)
+	// ListAdmin returns a paginated, filtered slice of questions (joined with their
+	// exam's name and language) for the admin management screen. skill and lang are
+	// optional equality filters ("" = any); answered is "yes"/"no"/"" (has a sample
+	// answer or not); search is a case-insensitive substring over prompt and answer.
+	ListAdmin(ctx context.Context, skill, lang, answered, search string, limit, offset int) ([]model.AdminQuestion, int, error)
+	// GetAdmin returns one question enriched with its exam's name and language,
+	// for the admin question detail/edit page.
+	GetAdmin(ctx context.Context, id uuid.UUID) (model.AdminQuestion, error)
+	// UpdateContent edits a question's prompt and sample answer (admin).
+	UpdateContent(ctx context.Context, id uuid.UUID, prompt, sampleAnswer string) error
+	// GetForAnswer returns one question's prompt and its exam's language, for
+	// generating a sample answer on demand.
+	GetForAnswer(ctx context.Context, id uuid.UUID) (model.QuestionNeedingAnswer, error)
+	// Delete removes a single question (admin).
+	Delete(ctx context.Context, id uuid.UUID) error
 	// ListMissingAnswers returns up to limit questions that still have no sample
 	// answer (and haven't exhausted answer attempts), for the backfill job. Backed
 	// by a partial index so it never scans the full questions table.
@@ -82,6 +97,99 @@ func (r *questionRepository) RandomFromBank(ctx context.Context) (*model.Questio
 		return nil, apperror.Internal(err)
 	}
 	return &q, nil
+}
+
+func (r *questionRepository) ListAdmin(ctx context.Context, skill, lang, answered, search string, limit, offset int) ([]model.AdminQuestion, int, error) {
+	// Shared WHERE so the count and page queries stay in sync. Empty params
+	// disable their filter; answered = 'yes'/'no' checks for a non-empty answer.
+	const filter = `($1 = '' OR q.type = $1)
+		AND ($2 = '' OR e.language = $2)
+		AND ($3 = '' OR ($3 = 'yes' AND q.sample_answer <> '') OR ($3 = 'no' AND q.sample_answer = ''))
+		AND ($4 = '' OR q.prompt ILIKE '%' || $4 || '%' OR q.sample_answer ILIKE '%' || $4 || '%')`
+
+	var total int
+	if err := r.db.QueryRow(ctx,
+		`SELECT count(*) FROM questions q JOIN exams e ON e.id = q.exam_id WHERE `+filter,
+		skill, lang, answered, search).Scan(&total); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+
+	rows, err := r.db.Query(ctx,
+		`SELECT q.id, q.exam_id, e.name, e.language, q.position, q.prompt, q.sample_answer, q.type, q.created_at
+		 FROM questions q JOIN exams e ON e.id = q.exam_id
+		 WHERE `+filter+`
+		 ORDER BY q.created_at DESC, q.position
+		 LIMIT $5 OFFSET $6`, skill, lang, answered, search, limit, offset)
+	if err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+	defer rows.Close()
+
+	qs := []model.AdminQuestion{}
+	for rows.Next() {
+		var q model.AdminQuestion
+		if err := rows.Scan(&q.ID, &q.ExamID, &q.ExamName, &q.Language, &q.Position, &q.Prompt, &q.SampleAnswer, &q.Type, &q.CreatedAt); err != nil {
+			return nil, 0, apperror.Internal(err)
+		}
+		qs = append(qs, q)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, 0, apperror.Internal(err)
+	}
+	return qs, total, nil
+}
+
+func (r *questionRepository) GetAdmin(ctx context.Context, id uuid.UUID) (model.AdminQuestion, error) {
+	var q model.AdminQuestion
+	err := r.db.QueryRow(ctx,
+		`SELECT q.id, q.exam_id, e.name, e.language, q.position, q.prompt, q.sample_answer, q.type, q.created_at
+		 FROM questions q JOIN exams e ON e.id = q.exam_id
+		 WHERE q.id = $1`, id).
+		Scan(&q.ID, &q.ExamID, &q.ExamName, &q.Language, &q.Position, &q.Prompt, &q.SampleAnswer, &q.Type, &q.CreatedAt)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return q, apperror.NotFound("không tìm thấy câu hỏi")
+		}
+		return q, apperror.Internal(err)
+	}
+	return q, nil
+}
+
+func (r *questionRepository) UpdateContent(ctx context.Context, id uuid.UUID, prompt, sampleAnswer string) error {
+	tag, err := r.db.Exec(ctx, `UPDATE questions SET prompt = $2, sample_answer = $3 WHERE id = $1`, id, prompt, sampleAnswer)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperror.NotFound("không tìm thấy câu hỏi")
+	}
+	return nil
+}
+
+func (r *questionRepository) GetForAnswer(ctx context.Context, id uuid.UUID) (model.QuestionNeedingAnswer, error) {
+	var q model.QuestionNeedingAnswer
+	err := r.db.QueryRow(ctx,
+		`SELECT q.id, q.prompt, e.language
+		 FROM questions q JOIN exams e ON e.id = q.exam_id
+		 WHERE q.id = $1`, id).Scan(&q.ID, &q.Prompt, &q.Language)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return q, apperror.NotFound("không tìm thấy câu hỏi")
+		}
+		return q, apperror.Internal(err)
+	}
+	return q, nil
+}
+
+func (r *questionRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	tag, err := r.db.Exec(ctx, `DELETE FROM questions WHERE id = $1`, id)
+	if err != nil {
+		return apperror.Internal(err)
+	}
+	if tag.RowsAffected() == 0 {
+		return apperror.NotFound("không tìm thấy câu hỏi")
+	}
+	return nil
 }
 
 func (r *questionRepository) ListMissingAnswers(ctx context.Context, limit int) ([]model.QuestionNeedingAnswer, error) {

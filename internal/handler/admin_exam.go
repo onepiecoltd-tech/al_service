@@ -257,6 +257,130 @@ func (h *AdminExamHandler) Questions(w http.ResponseWriter, r *http.Request) {
 	httputil.OK(w, qs)
 }
 
+// ListQuestions godoc
+//
+//	@Summary	List/manage questions across exams with filters (admin)
+//	@Tags		admin
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		skill		query	string	false	"Skill filter: listening|reading|writing|speaking"
+//	@Param		lang		query	string	false	"Language code filter"
+//	@Param		answered	query	string	false	"Has sample answer: yes|no"
+//	@Param		q			query	string	false	"Full-text search over prompt and sample answer"
+//	@Param		page		query	int		false	"Page (default 1)"
+//	@Param		limit		query	int		false	"Page size (default 20)"
+//	@Success	200	{object}	map[string]interface{}
+//	@Router		/api/v1/admin/questions [get]
+func (h *AdminExamHandler) ListQuestions(w http.ResponseWriter, r *http.Request) {
+	page, limit, offset := httputil.PageParams(r)
+	q := r.URL.Query()
+	qs, total, err := h.exams.AdminListQuestions(r.Context(), q.Get("skill"), q.Get("lang"), q.Get("answered"), q.Get("q"), limit, offset)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.Paginated(w, qs, page, limit, total)
+}
+
+// GetQuestion godoc
+//
+//	@Summary	Get one question with its exam name and language (admin)
+//	@Tags		admin
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Question ID"
+//	@Success	200	{object}	map[string]interface{}
+//	@Router		/api/v1/admin/questions/{id} [get]
+func (h *AdminExamHandler) GetQuestion(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid question id"))
+		return
+	}
+	q, err := h.exams.AdminGetQuestion(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, q)
+}
+
+// UpdateQuestion godoc
+//
+//	@Summary	Edit a question's prompt and sample answer (admin)
+//	@Tags		admin
+//	@Accept		json
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Question ID"
+//	@Success	200	{object}	map[string]bool
+//	@Router		/api/v1/admin/questions/{id} [put]
+func (h *AdminExamHandler) UpdateQuestion(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid question id"))
+		return
+	}
+	var body struct {
+		Prompt       string `json:"prompt"`
+		SampleAnswer string `json:"sample_answer"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid body"))
+		return
+	}
+	if err := h.exams.AdminUpdateQuestion(r.Context(), id, body.Prompt, body.SampleAnswer); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]bool{"updated": true})
+}
+
+// DeleteQuestion godoc
+//
+//	@Summary	Delete a question (admin)
+//	@Tags		admin
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Question ID"
+//	@Success	200	{object}	map[string]bool
+//	@Router		/api/v1/admin/questions/{id} [delete]
+func (h *AdminExamHandler) DeleteQuestion(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid question id"))
+		return
+	}
+	if err := h.exams.AdminDeleteQuestion(r.Context(), id); err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]bool{"deleted": true})
+}
+
+// GenerateAnswer godoc
+//
+//	@Summary	Generate a sample answer for a question via AI (admin)
+//	@Tags		admin
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		id	path	string	true	"Question ID"
+//	@Success	200	{object}	map[string]string
+//	@Router		/api/v1/admin/questions/{id}/generate-answer [post]
+func (h *AdminExamHandler) GenerateAnswer(w http.ResponseWriter, r *http.Request) {
+	id, err := uuid.Parse(r.PathValue("id"))
+	if err != nil {
+		httputil.Error(w, apperror.BadRequest("invalid question id"))
+		return
+	}
+	answer, err := h.exams.AdminGenerateAnswer(r.Context(), id)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]string{"sample_answer": answer})
+}
+
 func (h *AdminExamHandler) authorName(r *http.Request) string {
 	id, ok := middleware.UserIDFromContext(r.Context())
 	if !ok {
