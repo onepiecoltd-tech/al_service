@@ -29,6 +29,9 @@ type ExamService interface {
 	// is slow, so this is meant to run off the request goroutine.
 	ExtractImport(ctx context.Context, examID uuid.UUID, filename string, data []byte, restoreState string)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
+	// PracticeQuestions pools random questions of a skill across the bank and the
+	// user's own exams, for skill-based (not exam-based) practice.
+	PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error)
 	// ListMine returns only the exams owned by the given user. lang filters by
 	// exam language code; "" means all languages.
 	ListMine(ctx context.Context, ownerID uuid.UUID, lang string, limit, offset int) ([]model.Exam, int, error)
@@ -96,6 +99,16 @@ func (s *examService) ExtractImport(ctx context.Context, examID uuid.UUID, filen
 
 func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {
 	return s.questions.ListByExam(ctx, examID)
+}
+
+func (s *examService) PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error) {
+	if normalizeSkill(skill) == "" {
+		return nil, apperror.BadRequest("kỹ năng không hợp lệ")
+	}
+	if limit <= 0 || limit > 50 {
+		limit = 10
+	}
+	return s.questions.ListBySkill(ctx, userID, normalizeSkill(skill), normalizeLanguage(lang), limit)
 }
 
 func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, lang string, limit, offset int) ([]model.Exam, int, error) {

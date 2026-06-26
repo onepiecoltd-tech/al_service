@@ -20,6 +20,9 @@ type QuestionRepository interface {
 	// RandomFromBank returns one random question from the published admin
 	// question bank (owner_id IS NULL exams), for use as a speaking prompt.
 	RandomFromBank(ctx context.Context) (*model.Question, error)
+	// ListBySkill pools up to limit random questions of a given skill across the
+	// published bank and the user's own exams, optionally filtered by language.
+	ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error)
 	// ListMissingAnswers returns up to limit questions that still have no sample
 	// answer (and haven't exhausted answer attempts), for the backfill job. Backed
 	// by a partial index so it never scans the full questions table.
@@ -51,8 +54,8 @@ func (r *questionRepository) ReplaceForExam(ctx context.Context, examID uuid.UUI
 	}
 	for _, q := range qs {
 		if _, err := tx.Exec(ctx,
-			`INSERT INTO questions (exam_id, position, prompt, sample_answer) VALUES ($1, $2, $3, $4)`,
-			examID, q.Position, q.Prompt, q.SampleAnswer); err != nil {
+			`INSERT INTO questions (exam_id, position, prompt, sample_answer, type) VALUES ($1, $2, $3, $4, $5)`,
+			examID, q.Position, q.Prompt, q.SampleAnswer, q.Type); err != nil {
 			return apperror.Internal(err)
 		}
 	}
@@ -65,11 +68,11 @@ func (r *questionRepository) ReplaceForExam(ctx context.Context, examID uuid.UUI
 func (r *questionRepository) RandomFromBank(ctx context.Context) (*model.Question, error) {
 	var q model.Question
 	err := r.db.QueryRow(ctx,
-		`SELECT q.id, q.exam_id, q.position, q.prompt, q.sample_answer, q.created_at
+		`SELECT q.id, q.exam_id, q.position, q.prompt, q.sample_answer, q.type, q.created_at
 		 FROM questions q JOIN exams e ON e.id = q.exam_id
 		 WHERE e.owner_id IS NULL AND e.state = 'published'
 		 ORDER BY random() LIMIT 1`).
-		Scan(&q.ID, &q.ExamID, &q.Position, &q.Prompt, &q.SampleAnswer, &q.CreatedAt)
+		Scan(&q.ID, &q.ExamID, &q.Position, &q.Prompt, &q.SampleAnswer, &q.Type, &q.CreatedAt)
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, apperror.NotFound("ngân hàng chưa có câu hỏi nào")
@@ -121,9 +124,37 @@ func (r *questionRepository) BumpAnswerAttempt(ctx context.Context, id uuid.UUID
 	return nil
 }
 
+func (r *questionRepository) ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error) {
+	rows, err := r.db.Query(ctx,
+		`SELECT q.id, q.exam_id, q.position, q.prompt, q.sample_answer, q.type, q.created_at
+		 FROM questions q JOIN exams e ON e.id = q.exam_id
+		 WHERE q.type = $1
+		   AND ($2 = '' OR e.language = $2)
+		   AND ((e.owner_id IS NULL AND e.state = 'published') OR e.owner_id = $3)
+		 ORDER BY random()
+		 LIMIT $4`, skill, lang, userID, limit)
+	if err != nil {
+		return nil, apperror.Internal(err)
+	}
+	defer rows.Close()
+
+	qs := []model.Question{}
+	for rows.Next() {
+		var q model.Question
+		if err := rows.Scan(&q.ID, &q.ExamID, &q.Position, &q.Prompt, &q.SampleAnswer, &q.Type, &q.CreatedAt); err != nil {
+			return nil, apperror.Internal(err)
+		}
+		qs = append(qs, q)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, apperror.Internal(err)
+	}
+	return qs, nil
+}
+
 func (r *questionRepository) ListByExam(ctx context.Context, examID uuid.UUID) ([]model.Question, error) {
 	rows, err := r.db.Query(ctx,
-		`SELECT id, exam_id, position, prompt, sample_answer, created_at
+		`SELECT id, exam_id, position, prompt, sample_answer, type, created_at
 		 FROM questions WHERE exam_id = $1 ORDER BY position`, examID)
 	if err != nil {
 		return nil, apperror.Internal(err)
@@ -133,7 +164,7 @@ func (r *questionRepository) ListByExam(ctx context.Context, examID uuid.UUID) (
 	qs := []model.Question{}
 	for rows.Next() {
 		var q model.Question
-		if err := rows.Scan(&q.ID, &q.ExamID, &q.Position, &q.Prompt, &q.SampleAnswer, &q.CreatedAt); err != nil {
+		if err := rows.Scan(&q.ID, &q.ExamID, &q.Position, &q.Prompt, &q.SampleAnswer, &q.Type, &q.CreatedAt); err != nil {
 			return nil, apperror.Internal(err)
 		}
 		qs = append(qs, q)

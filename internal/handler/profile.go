@@ -21,16 +21,16 @@ func NewProfileHandler(profiles service.ProfileService) *ProfileHandler {
 }
 
 type profileResponse struct {
-	ID     string `json:"id"`
-	Email  string `json:"email"`
-	Name   string `json:"name"`
-	Handle string `json:"handle"`
-	Plan   string `json:"plan"`
-	Coins  int    `json:"coins"`
-	Elo    int    `json:"elo"`
-	Rank   string `json:"rank"`
-	Streak int    `json:"streak"`
-	Wins   int    `json:"wins"`
+	ID               string `json:"id"`
+	Email            string `json:"email"`
+	Name             string `json:"name"`
+	Handle           string `json:"handle"`
+	Plan             string `json:"plan"`
+	Coins            int    `json:"coins"`
+	Elo              int    `json:"elo"`
+	Rank             string `json:"rank"`
+	Streak           int    `json:"streak"`
+	Wins             int    `json:"wins"`
 	Role             string `json:"role"`
 	Joined           string `json:"joined"`
 	LearningLanguage string `json:"learning_language"`

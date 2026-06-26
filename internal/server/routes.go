@@ -133,6 +133,7 @@ func (s *Server) routes() http.Handler {
 	mux.Handle("POST /api/v1/wallet/topup", requireAuth(http.HandlerFunc(walletHandler.Topup)))
 	mux.Handle("POST /api/v1/wallet/gift", requireAuth(http.HandlerFunc(walletHandler.Gift)))
 
+	mux.Handle("GET /api/v1/questions", requireAuth(http.HandlerFunc(examHandler.PracticeQuestions)))
 	mux.Handle("GET /api/v1/exams/mine", requireAuth(http.HandlerFunc(examHandler.Mine)))
 	mux.Handle("POST /api/v1/exams/upload", requireAuth(http.HandlerFunc(examHandler.Upload)))
 	// Under a separate prefix (not /exams/{id}/...) so it can't collide with

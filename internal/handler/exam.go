@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,32 @@ func (h *ExamHandler) Mine(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	httputil.Paginated(w, exams, page, limit, total)
+}
+
+// PracticeQuestions godoc
+//
+//	@Summary	Pool questions of a skill across exams, for skill-based practice
+//	@Tags		exams
+//	@Produce	json
+//	@Security	BearerAuth
+//	@Param		skill	query		string	true	"Skill: listening|reading|writing|speaking"
+//	@Param		lang	query		string	false	"Language code filter"
+//	@Param		limit	query		int		false	"Max questions (default 10)"
+//	@Success	200	{object}	map[string]interface{}
+//	@Failure	400	{object}	errorEnvelope
+//	@Router		/api/v1/questions [get]
+func (h *ExamHandler) PracticeQuestions(w http.ResponseWriter, r *http.Request) {
+	uid, ok := middleware.RequireUserID(w, r)
+	if !ok {
+		return
+	}
+	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+	qs, err := h.exams.PracticeQuestions(r.Context(), uid, r.URL.Query().Get("skill"), r.URL.Query().Get("lang"), limit)
+	if err != nil {
+		httputil.Error(w, err)
+		return
+	}
+	httputil.OK(w, map[string]any{"questions": qs})
 }
 
 // Bank godoc

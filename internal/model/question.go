@@ -12,6 +12,7 @@ type Question struct {
 	Position     int       `json:"position"`
 	Prompt       string    `json:"prompt"`
 	SampleAnswer string    `json:"sample_answer"`
+	Type         string    `json:"type"` // skill: listening | reading | writing | speaking
 	CreatedAt    time.Time `json:"created_at"`
 }
 

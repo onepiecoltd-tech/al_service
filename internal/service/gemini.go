@@ -85,9 +85,14 @@ var extractQuestionsSchema = map[string]any{
 						"type":        "STRING",
 						"description": "Đáp án mẫu cho câu hỏi, CHỈ khi đề có sẵn đáp án; nếu không có thì để trống.",
 					},
+					"skill": map[string]any{
+						"type":        "STRING",
+						"enum":        []string{"listening", "reading", "writing", "speaking"},
+						"description": "Kỹ năng mà riêng câu hỏi này luyện: listening (nghe), reading (đọc), writing (viết), speaking (nói).",
+					},
 				},
-				"propertyOrdering": []string{"prompt", "sample_answer"},
-				"required":         []string{"prompt"},
+				"propertyOrdering": []string{"prompt", "sample_answer", "skill"},
+				"required":         []string{"prompt", "skill"},
 			},
 		},
 	},
@@ -96,7 +101,7 @@ var extractQuestionsSchema = map[string]any{
 
 // extractInstruction tells Gemini what to pull out of each exam page/chunk.
 const extractInstruction = "Đây là một đề thi luyện ngôn ngữ. Hãy đọc toàn bộ nội dung và trích ra từng câu hỏi. " +
-	"Đồng thời xác định 'skill' — kỹ năng chính của đề: listening (nghe), reading (đọc), writing (viết) hoặc speaking (nói). " +
+	"Xác định 'skill' ở cấp đề (kỹ năng chính của cả đề) VÀ 'skill' cho từng câu hỏi: listening (nghe), reading (đọc), writing (viết) hoặc speaking (nói). " +
 	"Với mỗi mục: 'prompt' là nội dung câu hỏi/đề bài (KHÔNG bao giờ chứa đáp án), " +
 	"'sample_answer' là đáp án mẫu CHỈ khi đề có sẵn, không có thì để trống. " +
 	"Nếu một mục không có phần câu hỏi (ví dụ chỉ là bảng đáp án) thì bỏ qua, " +
@@ -111,6 +116,7 @@ const chunkConcurrency = 3
 type parsedQuestion struct {
 	Prompt       string `json:"prompt"`
 	SampleAnswer string `json:"sample_answer"`
+	Skill        string `json:"skill"`
 }
 
 // ExtractQuestions extracts exam questions from an uploaded file and the exam's
@@ -162,6 +168,7 @@ func (c *GeminiClient) ExtractQuestions(ctx context.Context, filename string, da
 			Position:     len(qs) + 1,
 			Prompt:       prompt,
 			SampleAnswer: strings.TrimSpace(q.SampleAnswer),
+			Type:         normalizeSkill(q.Skill),
 		})
 	}
 	if len(qs) == 0 {
