@@ -30,8 +30,10 @@ type ExamService interface {
 	ExtractImport(ctx context.Context, examID uuid.UUID, filename string, data []byte, restoreState string)
 	Questions(ctx context.Context, examID uuid.UUID) ([]model.Question, error)
 	// PracticeQuestions pools random questions of a skill across the bank and the
-	// user's own exams, for skill-based (not exam-based) practice.
-	PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error)
+	// user's own exams, for skill-based (not exam-based) practice. source narrows
+	// to "bank" or "mine" ("" = both); search is a full-text filter over the
+	// question prompt and sample answer ("" = no filter).
+	PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang, source, search string, limit int) ([]model.Question, error)
 	// ListMine returns only the exams owned by the given user. lang filters by
 	// exam language code; "" means all languages.
 	ListMine(ctx context.Context, ownerID uuid.UUID, lang string, limit, offset int) ([]model.Exam, int, error)
@@ -101,14 +103,17 @@ func (s *examService) Questions(ctx context.Context, examID uuid.UUID) ([]model.
 	return s.questions.ListByExam(ctx, examID)
 }
 
-func (s *examService) PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error) {
+func (s *examService) PracticeQuestions(ctx context.Context, userID uuid.UUID, skill, lang, source, search string, limit int) ([]model.Question, error) {
 	if normalizeSkill(skill) == "" {
 		return nil, apperror.BadRequest("kỹ năng không hợp lệ")
 	}
-	if limit <= 0 || limit > 50 {
+	if limit <= 0 || limit > 100 {
 		limit = 10
 	}
-	return s.questions.ListBySkill(ctx, userID, normalizeSkill(skill), normalizeLanguage(lang), limit)
+	if source != "bank" && source != "mine" {
+		source = ""
+	}
+	return s.questions.ListBySkill(ctx, userID, normalizeSkill(skill), normalizeLanguage(lang), source, strings.TrimSpace(search), limit)
 }
 
 func (s *examService) ListMine(ctx context.Context, ownerID uuid.UUID, lang string, limit, offset int) ([]model.Exam, int, error) {

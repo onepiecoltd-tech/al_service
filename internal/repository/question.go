@@ -22,7 +22,9 @@ type QuestionRepository interface {
 	RandomFromBank(ctx context.Context) (*model.Question, error)
 	// ListBySkill pools up to limit random questions of a given skill across the
 	// published bank and the user's own exams, optionally filtered by language.
-	ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error)
+	// source narrows to "bank" or "mine" ("" = both); search filters by a
+	// case-insensitive substring over the prompt and sample answer ("" = no filter).
+	ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang, source, search string, limit int) ([]model.Question, error)
 	// ListMissingAnswers returns up to limit questions that still have no sample
 	// answer (and haven't exhausted answer attempts), for the backfill job. Backed
 	// by a partial index so it never scans the full questions table.
@@ -124,15 +126,20 @@ func (r *questionRepository) BumpAnswerAttempt(ctx context.Context, id uuid.UUID
 	return nil
 }
 
-func (r *questionRepository) ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang string, limit int) ([]model.Question, error) {
+func (r *questionRepository) ListBySkill(ctx context.Context, userID uuid.UUID, skill, lang, source, search string, limit int) ([]model.Question, error) {
 	rows, err := r.db.Query(ctx,
 		`SELECT q.id, q.exam_id, q.position, q.prompt, q.sample_answer, q.type, q.created_at
 		 FROM questions q JOIN exams e ON e.id = q.exam_id
 		 WHERE q.type = $1
 		   AND ($2 = '' OR e.language = $2)
-		   AND ((e.owner_id IS NULL AND e.state = 'published') OR e.owner_id = $3)
+		   AND (CASE $5
+		          WHEN 'bank' THEN e.owner_id IS NULL AND e.state = 'published'
+		          WHEN 'mine' THEN e.owner_id = $3
+		          ELSE (e.owner_id IS NULL AND e.state = 'published') OR e.owner_id = $3
+		        END)
+		   AND ($6 = '' OR q.prompt ILIKE '%' || $6 || '%' OR q.sample_answer ILIKE '%' || $6 || '%')
 		 ORDER BY random()
-		 LIMIT $4`, skill, lang, userID, limit)
+		 LIMIT $4`, skill, lang, userID, limit, source, search)
 	if err != nil {
 		return nil, apperror.Internal(err)
 	}

@@ -59,6 +59,8 @@ func (h *ExamHandler) Mine(w http.ResponseWriter, r *http.Request) {
 //	@Security	BearerAuth
 //	@Param		skill	query		string	true	"Skill: listening|reading|writing|speaking"
 //	@Param		lang	query		string	false	"Language code filter"
+//	@Param		source	query		string	false	"Source filter: bank|mine (default both)"
+//	@Param		q		query		string	false	"Full-text search over prompt and sample answer"
 //	@Param		limit	query		int		false	"Max questions (default 10)"
 //	@Success	200	{object}	map[string]interface{}
 //	@Failure	400	{object}	errorEnvelope
@@ -69,7 +71,7 @@ func (h *ExamHandler) PracticeQuestions(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	qs, err := h.exams.PracticeQuestions(r.Context(), uid, r.URL.Query().Get("skill"), r.URL.Query().Get("lang"), limit)
+	qs, err := h.exams.PracticeQuestions(r.Context(), uid, r.URL.Query().Get("skill"), r.URL.Query().Get("lang"), r.URL.Query().Get("source"), r.URL.Query().Get("q"), limit)
 	if err != nil {
 		httputil.Error(w, err)
 		return
